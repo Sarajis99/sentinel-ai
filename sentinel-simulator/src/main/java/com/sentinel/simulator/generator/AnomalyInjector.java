@@ -7,6 +7,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
 import java.time.LocalDateTime;
+import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -21,6 +22,9 @@ import java.util.UUID;
 @Component
 @RequiredArgsConstructor
 public class AnomalyInjector {
+
+    private static final String POD_SUFFIX = "-pod-";
+    private static final String ANOMALY_KEY = "anomaly";
 
     private final Random random = new Random();
 
@@ -58,7 +62,7 @@ public class AnomalyInjector {
         for (int i = 0; i < count; i++) {
             events.add(LogEventDTO.builder()
                     .eventId(UUID.randomUUID().toString())
-                    .timestamp(LocalDateTime.now().plusNanos(i * 100_000_000L))
+                    .timestamp(LocalDateTime.now(ZoneId.systemDefault()).plusNanos(i * 100_000_000L))
                     .serviceName(serviceName)
                     .logLevel(LogLevel.ERROR)
                     .message("CRITICAL: Unhandled exception in request processing - " + i)
@@ -67,8 +71,8 @@ public class AnomalyInjector {
                     .requestId(UUID.randomUUID().toString().substring(0, 8))
                     .latencyMs(5000 + random.nextInt(2000))
                     .statusCode(500)
-                    .host(serviceName + "-pod-" + random.nextInt(3))
-                    .metadata(Map.of("anomaly", "error_spike", "env", "prod"))
+                    .host(serviceName + POD_SUFFIX + random.nextInt(3))
+                    .metadata(Map.of(ANOMALY_KEY, "error_spike", "env", "prod"))
                     .build());
         }
         return events;
@@ -85,15 +89,15 @@ public class AnomalyInjector {
             int spikedLatency = 3000 + random.nextInt(5000);
             events.add(LogEventDTO.builder()
                     .eventId(UUID.randomUUID().toString())
-                    .timestamp(LocalDateTime.now().plusNanos(i * 200_000_000L))
+                    .timestamp(LocalDateTime.now(ZoneId.systemDefault()).plusNanos(i * 200_000_000L))
                     .serviceName(serviceName)
                     .logLevel(i % 5 == 0 ? LogLevel.ERROR : LogLevel.WARN)
                     .message(String.format("WARN: Request processing slow - latency=%dms (threshold=500ms)", spikedLatency))
                     .requestId(UUID.randomUUID().toString().substring(0, 8))
                     .latencyMs(spikedLatency)
                     .statusCode(i % 10 == 0 ? 503 : 200)
-                    .host(serviceName + "-pod-" + random.nextInt(3))
-                    .metadata(Map.of("anomaly", "latency_surge", "env", "prod"))
+                    .host(serviceName + POD_SUFFIX + random.nextInt(3))
+                    .metadata(Map.of(ANOMALY_KEY, "latency_surge", "env", "prod"))
                     .build());
         }
         return events;
@@ -106,16 +110,16 @@ public class AnomalyInjector {
         List<LogEventDTO> events = new ArrayList<>();
 
         String dbErrorMessage = "FATAL: Cannot acquire database connection from pool - pool exhausted";
-        String dbStackTrace = "org.springframework.dao.DataAccessResourceFailureException: " +
-                "Unable to acquire JDBC Connection\n" +
-                "\tat org.hibernate.engine.jdbc.connections.internal.ConnectionProviderInitiator.initiateService\n" +
-                "\tat com.zaxxer.hikari.pool.HikariPool.getConnection(HikariPool.java:213)\n" +
-                "\tat com.sentinel.repository.OrderRepository.findById(OrderRepository.java:45)";
+        String dbStackTrace = """
+                org.springframework.dao.DataAccessResourceFailureException: Unable to acquire JDBC Connection
+                \tat org.hibernate.engine.jdbc.connections.internal.ConnectionProviderInitiator.initiateService
+                \tat com.zaxxer.hikari.pool.HikariPool.getConnection(HikariPool.java:213)
+                \tat com.sentinel.repository.OrderRepository.findById(OrderRepository.java:45)""";
 
         for (int i = 0; i < 35; i++) {
             events.add(LogEventDTO.builder()
                     .eventId(UUID.randomUUID().toString())
-                    .timestamp(LocalDateTime.now().plusNanos(i * 150_000_000L))
+                    .timestamp(LocalDateTime.now(ZoneId.systemDefault()).plusNanos(i * 150_000_000L))
                     .serviceName(serviceName)
                     .logLevel(LogLevel.ERROR)
                     .message(dbErrorMessage)
@@ -123,8 +127,8 @@ public class AnomalyInjector {
                     .requestId(UUID.randomUUID().toString().substring(0, 8))
                     .latencyMs(30000) // 30s timeout
                     .statusCode(503)
-                    .host(serviceName + "-pod-" + (i % 3))
-                    .metadata(Map.of("anomaly", "db_outage", "env", "prod"))
+                    .host(serviceName + POD_SUFFIX + (i % 3))
+                    .metadata(Map.of(ANOMALY_KEY, "db_outage", "env", "prod"))
                     .build());
         }
         return events;
@@ -142,7 +146,7 @@ public class AnomalyInjector {
 
             events.add(LogEventDTO.builder()
                     .eventId(UUID.randomUUID().toString())
-                    .timestamp(LocalDateTime.now().plusNanos(i * 300_000_000L))
+                    .timestamp(LocalDateTime.now(ZoneId.systemDefault()).plusNanos(i * 300_000_000L))
                     .serviceName(serviceName)
                     .logLevel(isOOM ? LogLevel.ERROR : LogLevel.WARN)
                     .message(isOOM
@@ -153,8 +157,8 @@ public class AnomalyInjector {
                             "\tat java.util.Arrays.copyOf(Arrays.java:3210)" : null)
                     .latencyMs(latency)
                     .statusCode(isOOM ? 500 : 200)
-                    .host(serviceName + "-pod-0") // Single pod leaking
-                    .metadata(Map.of("anomaly", "memory_leak", "env", "prod"))
+                    .host(serviceName + POD_SUFFIX + "0") // Single pod leaking
+                    .metadata(Map.of(ANOMALY_KEY, "memory_leak", "env", "prod"))
                     .build());
         }
         return events;
@@ -169,7 +173,7 @@ public class AnomalyInjector {
         for (int i = 0; i < 30; i++) {
             events.add(LogEventDTO.builder()
                     .eventId(UUID.randomUUID().toString())
-                    .timestamp(LocalDateTime.now().plusNanos(i * 200_000_000L))
+                    .timestamp(LocalDateTime.now(ZoneId.systemDefault()).plusNanos(i * 200_000_000L))
                     .serviceName(serviceName)
                     .logLevel(i % 3 == 0 ? LogLevel.ERROR : LogLevel.WARN)
                     .message(String.format("Downstream service timeout after %dms - attempt %d/3",
@@ -179,8 +183,8 @@ public class AnomalyInjector {
                             "\tat sun.nio.ch.NioSocketImpl.timedRead(NioSocketImpl.java:278)" : null)
                     .latencyMs(5000 + random.nextInt(3000))
                     .statusCode(i % 3 == 0 ? 503 : 504)
-                    .host(serviceName + "-pod-" + random.nextInt(3))
-                    .metadata(Map.of("anomaly", "downstream_failure", "env", "prod"))
+                    .host(serviceName + POD_SUFFIX + random.nextInt(3))
+                    .metadata(Map.of(ANOMALY_KEY, "downstream_failure", "env", "prod"))
                     .build());
         }
         return events;
