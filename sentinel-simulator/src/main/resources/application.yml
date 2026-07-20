@@ -1,0 +1,20 @@
+spring:
+  application:
+    name: sentinel-simulator
+
+  kafka:
+    bootstrap-servers: localhost:9092
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.springframework.kafka.support.serializer.JsonSerializer
+      acks: 1                    # Leader acknowledgment (fast + reliable)
+      retries: 3
+      batch-size: 16384
+      linger-ms: 5              # Small batch delay for throughput
+      properties:
+        spring.json.add.type.headers: false
+
+logging:
+  level:
+    com.sentinel.simulator: INFO
+    org.apache.kafka: WARN     # Reduce Kafka noise

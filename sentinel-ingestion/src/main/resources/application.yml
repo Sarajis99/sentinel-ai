@@ -1,0 +1,52 @@
+spring:
+  application:
+    name: sentinel-ingestion
+
+  datasource:
+    url: jdbc:postgresql://localhost:5432/sentinel
+    username: sentinel
+    password: sentinel123
+    driver-class-name: org.postgresql.Driver
+    hikari:
+      maximum-pool-size: 10
+      minimum-idle: 2
+      connection-timeout: 30000
+
+  jpa:
+    hibernate:
+      ddl-auto: validate          # Schema managed by init.sql — don't let JPA touch it
+    show-sql: false
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.PostgreSQLDialect
+        jdbc:
+          batch_size: 50          # Batch inserts for performance
+        order_inserts: true
+
+  data:
+    redis:
+      host: localhost
+      port: 6379
+      timeout: 2000ms
+      lettuce:
+        pool:
+          max-active: 10
+          max-idle: 5
+
+  kafka:
+    bootstrap-servers: localhost:9092
+    consumer:
+      group-id: sentinel-ingestion-group
+      auto-offset-reset: earliest
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.springframework.kafka.support.serializer.JsonDeserializer
+      properties:
+        spring.json.trusted.packages: "com.sentinel.common.dto"
+        spring.json.value.default.type: com.sentinel.common.dto.LogEventDTO
+      max-poll-records: 100       # Process up to 100 records per poll
+
+logging:
+  level:
+    com.sentinel.ingestion: INFO
+    org.apache.kafka: WARN
+    org.hibernate.SQL: WARN
