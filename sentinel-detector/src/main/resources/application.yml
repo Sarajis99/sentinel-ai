@@ -1,0 +1,61 @@
+spring:
+  application:
+    name: sentinel-detector
+
+  # PostgreSQL — for persisting detected anomalies
+  datasource:
+    url: jdbc:postgresql://localhost:5432/sentinel
+    username: sentinel
+    password: sentinel123
+    driver-class-name: org.postgresql.Driver
+
+  jpa:
+    hibernate:
+      ddl-auto: validate        # Table already created by init.sql — just validate
+    show-sql: false
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.PostgreSQLDialect
+        format_sql: false
+
+  kafka:
+    bootstrap-servers: localhost:9092
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.springframework.kafka.support.serializer.JsonSerializer
+      acks: all
+      retries: 3
+      properties:
+        enable.idempotence: true
+        spring.json.add.type.headers: false
+
+  data:
+    redis:
+      host: localhost
+      port: 6379
+
+# Detection thresholds — all tunable without code changes
+detection:
+  window-minutes: 5
+  min-requests-for-detection: 10
+  detector-interval-ms: 30000         # Run detection every 30 seconds
+
+  # Z-Score thresholds
+  z-score-p0-threshold: 5.0           # 5 std deviations → Critical
+  z-score-p1-threshold: 3.0           # 3 std deviations → High
+  z-score-p2-threshold: 2.0           # 2 std deviations → Medium
+
+  # Error rate thresholds
+  error-rate-p0-threshold: 0.20       # 20% error rate → Critical
+  error-rate-p1-threshold: 0.10       # 10% error rate → High
+  error-rate-p2-threshold: 0.05       # 5%  error rate → Medium
+
+  # Latency/Moving average
+  latency-deviation-threshold: 0.50   # 50% above baseline → anomaly
+  moving-average-lookback-minutes: 15
+
+logging:
+  level:
+    com.sentinel.detector: INFO
+    org.springframework.kafka: WARN
+    org.springframework.data.redis: WARN
