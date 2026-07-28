@@ -1,0 +1,94 @@
+spring:
+  application:
+    name: sentinel-rca
+
+  # ─── PostgreSQL ────────────────────────────────────────────────────────────
+  datasource:
+    url: jdbc:postgresql://localhost:5432/sentinel
+    username: sentinel
+    password: sentinel123
+    driver-class-name: org.postgresql.Driver
+    hikari:
+      maximum-pool-size: 10
+      minimum-idle: 2
+      connection-timeout: 30000
+
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    show-sql: false
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.PostgreSQLDialect
+        jdbc:
+          batch_size: 20
+
+  # ─── Redis ─────────────────────────────────────────────────────────────────
+  data:
+    redis:
+      host: localhost
+      port: 6379
+      timeout: 2000ms
+      lettuce:
+        pool:
+          max-active: 10
+          max-idle: 5
+
+  # ─── Kafka ─────────────────────────────────────────────────────────────────
+  kafka:
+    bootstrap-servers: localhost:9092
+    consumer:
+      group-id: sentinel-rca-group
+      auto-offset-reset: earliest
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.springframework.kafka.support.serializer.JsonDeserializer
+      properties:
+        spring.json.trusted.packages: "com.sentinel.common.dto"
+        spring.json.value.default.type: com.sentinel.common.dto.AnomalyDTO
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.springframework.kafka.support.serializer.JsonSerializer
+      properties:
+        spring.json.add.type.headers: false
+
+server:
+  port: 8083
+
+# ─── LLM Configuration ───────────────────────────────────────────────────────
+llm:
+  provider: ${LLM_PROVIDER:openrouter} # openrouter or ollama
+  openrouter:
+    api-key: ${OPENROUTER_API_KEY:your-openrouter-key-here}
+    base-url: https://openrouter.ai/api/v1
+    model: ${OPENROUTER_MODEL:google/gemini-2.5-flash:free}
+    timeout-seconds: 45
+    max-retries: 2
+    site-url: https://github.com/Sarajis99/sentinel-ai
+    app-name: Sentinel AI
+
+  ollama:
+    base-url: http://localhost:11434
+    model: llama3
+    timeout-seconds: 120
+
+  cache:
+    enabled: true
+    ttl-seconds: 3600        # Cache LLM responses for 1 hour
+
+  rate-limit:
+    max-per-minute: 15       # Stay well under OpenRouter's 20/min free limit
+
+# ─── RCA Configuration ───────────────────────────────────────────────────────
+rca:
+  context:
+    window-minutes: 5        # Fetch logs ±5 min around anomaly timestamp
+    max-log-entries: 50      # Max logs to feed to LLM (token limit safety)
+  embedding:
+    enabled: true
+    dimensions: 1536
+
+logging:
+  level:
+    com.sentinel.rca: INFO
+    org.apache.kafka: WARN
+    org.hibernate.SQL: WARN
