@@ -1,0 +1,67 @@
+spring:
+  application:
+    name: sentinel-api
+
+  # PostgreSQL
+  datasource:
+    url: jdbc:postgresql://localhost:5432/sentinel
+    username: sentinel
+    password: sentinel123
+    driver-class-name: org.postgresql.Driver
+    hikari:
+      maximum-pool-size: 10
+      minimum-idle: 2
+      connection-timeout: 30000
+
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    show-sql: false
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.PostgreSQLDialect
+
+  # Redis
+  data:
+    redis:
+      host: localhost
+      port: 6379
+      timeout: 2000ms
+      lettuce:
+        pool:
+          max-active: 10
+          max-idle: 5
+
+  # Kafka (for simulation trigger)
+  kafka:
+    bootstrap-servers: localhost:9092
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.springframework.kafka.support.serializer.JsonSerializer
+      properties:
+        spring.json.add.type.headers: false
+
+server:
+  port: 8084
+
+# Data Retention Configuration
+retention:
+  log-events-max-age-hours: 24
+  anomalies-max-age-hours: 24
+  incidents-max-count: 1000
+  cron: "0 0 0 * * *"   # Run at midnight daily
+
+# Simulation Configuration
+simulation:
+  lock-duration-seconds: 150  # 2.5 minutes (simulation runs for 2 min + buffer)
+  burst-duration-seconds: 120  # 2 minutes of anomaly injection
+
+# CORS
+cors:
+  allowed-origins: "http://localhost:5173,http://localhost:3000,http://localhost:8084"
+
+logging:
+  level:
+    com.sentinel.api: INFO
+    org.apache.kafka: WARN
+    org.hibernate.SQL: WARN

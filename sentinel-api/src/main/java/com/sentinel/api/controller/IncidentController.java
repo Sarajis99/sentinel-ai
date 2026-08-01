@@ -1,0 +1,116 @@
+package com.sentinel.api.controller;
+
+import com.sentinel.api.dto.DashboardStatsDTO;
+import com.sentinel.api.dto.IncidentDTO;
+import com.sentinel.api.dto.ManualDispositionRequest;
+import com.sentinel.api.service.IncidentService;
+import com.sentinel.api.service.SimulationService;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.data.domain.Page;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.*;
+
+import java.util.List;
+import java.util.Map;
+import java.util.UUID;
+
+/**
+ * IncidentController — REST API for incident management.
+ *
+ * Endpoints:
+ *   GET  /api/v1/incidents           — Paginated, filterable incident list
+ *   GET  /api/v1/incidents/{id}      — Single incident detail
+ *   GET  /api/v1/incidents/unknown   — Manual triage queue (UNKNOWN root cause)
+ *   GET  /api/v1/incidents/stats     — Dashboard summary statistics
+ *   POST /api/v1/incidents/{id}/resolve      — Mark as resolved
+ *   POST /api/v1/incidents/{id}/dismiss      — Mark as false positive
+ *   PUT  /api/v1/incidents/{id}/manual-disposition — Engineer fills RCA manually
+ */
+@Slf4j
+@RestController
+@RequestMapping("/api/v1/incidents")
+@RequiredArgsConstructor
+public class IncidentController {
+
+    private final IncidentService incidentService;
+    private final SimulationService simulationService;
+
+    /**
+     * GET /api/v1/incidents?page=0&size=20&severity=P0&status=OPEN&service=payment-service
+     * Returns paginated incidents with optional filtering.
+     */
+    @GetMapping
+    public ResponseEntity<Page<IncidentDTO>> getIncidents(
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size,
+            @RequestParam(required = false) String severity,
+            @RequestParam(required = false) String status,
+            @RequestParam(required = false) String service) {
+
+        log.debug("GET /incidents page={} size={} severity={} status={} service={}",
+                page, size, severity, status, service);
+        return ResponseEntity.ok(incidentService.getIncidents(page, size, severity, status, service));
+    }
+
+    /**
+     * GET /api/v1/incidents/{id}
+     * Returns a single incident with full RCA details.
+     */
+    @GetMapping("/{id}")
+    public ResponseEntity<IncidentDTO> getIncident(@PathVariable("id") UUID incidentId) {
+        return ResponseEntity.ok(incidentService.getIncident(incidentId));
+    }
+
+    /**
+     * GET /api/v1/incidents/unknown
+     * Returns all UNKNOWN incidents for the manual triage queue.
+     */
+    @GetMapping("/unknown")
+    public ResponseEntity<List<IncidentDTO>> getUnknownIncidents() {
+        return ResponseEntity.ok(incidentService.getUnknownIncidents());
+    }
+
+    /**
+     * GET /api/v1/incidents/stats
+     * Returns dashboard summary statistics (total incidents, MTTR, severity breakdown).
+     */
+    @GetMapping("/stats")
+    public ResponseEntity<DashboardStatsDTO> getDashboardStats() {
+        boolean simActive = simulationService.isSimulationActive();
+        return ResponseEntity.ok(incidentService.getDashboardStats(simActive));
+    }
+
+    /**
+     * POST /api/v1/incidents/{id}/resolve
+     * Marks an incident as RESOLVED and calculates MTTR.
+     */
+    @PostMapping("/{id}/resolve")
+    public ResponseEntity<IncidentDTO> resolveIncident(@PathVariable("id") UUID incidentId) {
+        log.info("POST /incidents/{}/resolve", incidentId);
+        return ResponseEntity.ok(incidentService.resolveIncident(incidentId));
+    }
+
+    /**
+     * POST /api/v1/incidents/{id}/dismiss
+     * Marks an incident as FALSE_POSITIVE.
+     */
+    @PostMapping("/{id}/dismiss")
+    public ResponseEntity<IncidentDTO> dismissIncident(@PathVariable("id") UUID incidentId) {
+        log.info("POST /incidents/{}/dismiss", incidentId);
+        return ResponseEntity.ok(incidentService.dismissIncident(incidentId));
+    }
+
+    /**
+     * PUT /api/v1/incidents/{id}/manual-disposition
+     * Engineer manually fills in the RCA for UNKNOWN incidents.
+     */
+    @PutMapping("/{id}/manual-disposition")
+    public ResponseEntity<IncidentDTO> manualDisposition(
+            @PathVariable("id") UUID incidentId,
+            @RequestBody ManualDispositionRequest request) {
+
+        log.info("PUT /incidents/{}/manual-disposition rootCause={}", incidentId, request.getRootCause());
+        return ResponseEntity.ok(incidentService.manualDisposition(incidentId, request));
+    }
+}
