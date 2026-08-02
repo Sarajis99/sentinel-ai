@@ -1,6 +1,8 @@
 package com.sentinel.api.controller;
 
+import com.sentinel.api.dto.CommentRequest;
 import com.sentinel.api.dto.DashboardStatsDTO;
+import com.sentinel.api.dto.IncidentCommentDTO;
 import com.sentinel.api.dto.IncidentDTO;
 import com.sentinel.api.dto.ManualDispositionRequest;
 import com.sentinel.api.service.IncidentService;
@@ -112,5 +114,35 @@ public class IncidentController {
 
         log.info("PUT /incidents/{}/manual-disposition rootCause={}", incidentId, request.getRootCause());
         return ResponseEntity.ok(incidentService.manualDisposition(incidentId, request));
+    }
+
+    @PostMapping("/{id}/accept")
+    public ResponseEntity<IncidentDTO> acceptIncident(@PathVariable("id") UUID incidentId) {
+        log.info("POST /incidents/{}/accept", incidentId);
+        return ResponseEntity.ok(incidentService.acceptIncident(incidentId));
+    }
+
+    @PostMapping("/{id}/close")
+    public ResponseEntity<IncidentDTO> closeIncident(@PathVariable("id") UUID incidentId) {
+        log.info("POST /incidents/{}/close", incidentId);
+        return ResponseEntity.ok(incidentService.closeIncident(incidentId));
+    }
+
+    @PostMapping("/{id}/retry-analysis")
+    public ResponseEntity<Map<String, String>> retryAnalysis(@PathVariable("id") UUID incidentId) {
+        log.info("POST /incidents/{}/retry-analysis", incidentId);
+        incidentService.retryAnalysis(incidentId);
+        return ResponseEntity.ok(Map.of("status", "retry_requested", "message", "AI analysis retry has been queued"));
+    }
+
+    @GetMapping("/{id}/comments")
+    public ResponseEntity<List<IncidentCommentDTO>> getComments(@PathVariable("id") UUID incidentId) {
+        return ResponseEntity.ok(incidentService.getComments(incidentId));
+    }
+
+    @PostMapping("/{id}/comments")
+    public ResponseEntity<IncidentCommentDTO> addComment(@PathVariable("id") UUID incidentId, @RequestBody CommentRequest request) {
+        log.info("POST /incidents/{}/comments", incidentId);
+        return ResponseEntity.ok(incidentService.addComment(incidentId, request.getAuthor(), request.getContent()));
     }
 }

@@ -873,3 +873,165 @@ body { font-family: var(--font-sans); background: var(--bg-primary); color: var(
   font-size: 0.9rem;
   font-weight: 600;
 }
+
+/* ─── New Status Badges ───────────────────────────────────────────────────── */
+.badge-new { color: #6366f1; background: #eef2ff; border-color: #c7d2fe; }
+.badge-assessing { color: #7e22ce; background: #faf5ff; border-color: #e9d5ff; }
+.badge-rca-complete, .badge-rca_complete { color: #0891b2; background: #ecfeff; border-color: #a5f3fc; }
+.badge-awaiting-triage, .badge-awaiting_triage { color: #ea580c; background: #fff7ed; border-color: #fdba74; }
+.badge-in-progress, .badge-in_progress { color: #2563eb; background: #eff6ff; border-color: #bfdbfe; }
+.badge-closed { color: #475569; background: #f1f5f9; border-color: #cbd5e1; }
+
+/* ─── Warning Chevron ──────────────────────────────────────────────────────── */
+.sn-flow-step.warning {
+  background: #ea580c;
+  color: white;
+}
+
+.step-check {
+  font-weight: 700;
+  margin-right: 2px;
+}
+
+/* ─── AI Status Banners ────────────────────────────────────────────────────── */
+.ai-status-banner {
+  padding: 12px 16px;
+  border-radius: 4px;
+  font-size: 0.85rem;
+  font-weight: 500;
+  margin-bottom: 16px;
+}
+
+.ai-status-banner.warning {
+  background: #fff7ed;
+  border: 1px solid #fdba74;
+  color: #9a3412;
+}
+
+.ai-processing-indicator {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.85rem;
+  color: var(--accent-primary);
+  font-weight: 500;
+}
+
+/* ─── Work Notes ───────────────────────────────────────────────────────────── */
+.work-notes-section {
+  margin-top: 20px;
+  border: 1px solid #c0c6cc;
+  border-radius: 4px;
+  background: #ffffff;
+  overflow: hidden;
+}
+
+.work-notes-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 16px;
+  background: #f4f6f8;
+  border-bottom: 1px solid #c0c6cc;
+}
+
+.work-notes-title {
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: #293e40;
+}
+
+.work-notes-count {
+  font-size: 0.75rem;
+  color: #4a5e68;
+  font-weight: 500;
+}
+
+.work-notes-input-area {
+  padding: 12px 16px;
+  border-bottom: 1px solid #e2e8f0;
+  display: flex;
+  gap: 12px;
+  align-items: flex-end;
+}
+
+.work-notes-textarea {
+  flex: 1;
+  padding: 8px 12px;
+  border: 1px solid #c0c6cc;
+  border-radius: 4px;
+  font-family: var(--font-sans);
+  font-size: 0.82rem;
+  resize: vertical;
+  min-height: 60px;
+  max-height: 150px;
+  color: #293e40;
+}
+
+.work-notes-textarea:focus {
+  outline: none;
+  border-color: #017766;
+}
+
+.work-notes-submit {
+  flex-shrink: 0;
+  padding: 8px 16px;
+}
+
+.work-notes-list {
+  max-height: 300px;
+  overflow-y: auto;
+}
+
+.work-notes-empty {
+  padding: 24px 16px;
+  text-align: center;
+  color: #64748b;
+  font-size: 0.82rem;
+}
+
+.work-note-item {
+  padding: 12px 16px;
+  border-bottom: 1px solid #f1f5f9;
+}
+
+.work-note-item:last-child {
+  border-bottom: none;
+}
+
+.work-note-meta {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 4px;
+}
+
+.work-note-author {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: #017766;
+}
+
+.work-note-time {
+  font-size: 0.7rem;
+  color: #94a3b8;
+  font-family: var(--font-mono);
+}
+
+.work-note-content {
+  font-size: 0.82rem;
+  color: #334155;
+  line-height: 1.5;
+  white-space: pre-wrap;
+}
+
+/* ─── Dismiss Button ───────────────────────────────────────────────────────── */
+.btn-dismiss {
+  background: #ffffff;
+  border: 1px solid var(--border-medium);
+  color: var(--text-secondary);
+}
+.btn-dismiss:hover {
+  background: #fef2f2;
+  border-color: #fca5a5;
+  color: var(--severity-p0);
+}

@@ -33,6 +33,18 @@ export const api = {
     body: JSON.stringify(body),
   }),
 
+  // New lifecycle actions
+  acceptIncident: (id) => fetchJSON(`/incidents/${id}/accept`, { method: 'POST' }),
+  closeIncident: (id) => fetchJSON(`/incidents/${id}/close`, { method: 'POST' }),
+  retryAnalysis: (id) => fetchJSON(`/incidents/${id}/retry-analysis`, { method: 'POST' }),
+
+  // Comments
+  getComments: (id) => fetchJSON(`/incidents/${id}/comments`),
+  addComment: (id, body) => fetchJSON(`/incidents/${id}/comments`, {
+    method: 'POST',
+    body: JSON.stringify(body),
+  }),
+
   // System
   triggerSimulation: () => fetchJSON('/system/simulate', { method: 'POST' }),
   getSimulationStatus: () => fetchJSON('/system/simulation-status'),

@@ -13,6 +13,8 @@ import java.util.UUID;
 @Repository
 public interface IncidentRepository extends JpaRepository<Incident, Long> {
 
+    Optional<Incident> findByIncidentId(UUID incidentId);
+
     Optional<Incident> findByAnomalyId(UUID anomalyId);
 
     boolean existsByAnomalyId(UUID anomalyId);

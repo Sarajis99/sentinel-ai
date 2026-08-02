@@ -54,6 +54,17 @@ function getServiceClass(name) {
   return `service-${key}`;
 }
 
+function timeAgo(dateStr) {
+  if (!dateStr) return '';
+  const now = new Date();
+  const d = new Date(dateStr);
+  const diff = Math.floor((now - d) / 1000);
+  if (diff < 60) return 'just now';
+  if (diff < 3600) return `${Math.floor(diff / 60)}m ago`;
+  if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`;
+  return `${Math.floor(diff / 86400)}d ago`;
+}
+
 export default function App() {
   const [currentView, setCurrentView] = useState('dashboard');
   const [incidents, setIncidents] = useState([]);
@@ -69,6 +80,9 @@ export default function App() {
     rootCause: '', rcaSummary: '', impactAnalysis: '', suggestedFix: '', prevention: ''
   });
   const [loading, setLoading] = useState(true);
+  const [comments, setComments] = useState([]);
+  const [newComment, setNewComment] = useState('');
+  const [retrying, setRetrying] = useState(false);
 
   const addToast = useCallback((message, type = 'info') => {
     const id = Date.now();
@@ -157,13 +171,70 @@ export default function App() {
     } catch (err) { addToast(err.message, 'error'); }
   };
 
+  const handleAccept = async (id) => {
+    try {
+      const updated = await api.acceptIncident(id);
+      addToast('Incident accepted — status: In Progress', 'success');
+      setSelected(updated);
+      loadData();
+    } catch (err) { addToast(err.message, 'error'); }
+  };
+
+  const handleClose = async (id) => {
+    try {
+      const updated = await api.closeIncident(id);
+      addToast('Incident closed', 'success');
+      setSelected(updated);
+      loadData();
+    } catch (err) { addToast(err.message, 'error'); }
+  };
+
+  const handleRetryAnalysis = async (id) => {
+    try {
+      setRetrying(true);
+      await api.retryAnalysis(id);
+      addToast('AI analysis retry queued — refreshing in a few seconds...', 'info');
+      // Poll for updated status after a delay
+      setTimeout(async () => {
+        try {
+          const updated = await api.getIncident(id);
+          setSelected(updated);
+          loadData();
+        } catch (e) { /* ignore */ }
+        setRetrying(false);
+      }, 8000);
+    } catch (err) {
+      addToast(err.message, 'error');
+      setRetrying(false);
+    }
+  };
+
+  const loadComments = async (incidentId) => {
+    try {
+      const data = await api.getComments(incidentId);
+      setComments(data);
+    } catch { setComments([]); }
+  };
+
+  const handleAddComment = async () => {
+    if (!selected || !newComment.trim()) return;
+    try {
+      await api.addComment(selected.incidentId, { author: 'Analyst', content: newComment.trim() });
+      setNewComment('');
+      loadComments(selected.incidentId);
+      addToast('Work note added', 'success');
+    } catch (err) { addToast(err.message, 'error'); }
+  };
+
   const handleSelectIncident = async (inc) => {
     try {
       const full = await api.getIncident(inc.incidentId);
       setSelected(full);
       setActiveTab('details');
+      loadComments(full.incidentId);
     } catch {
       setSelected(inc);
+      setComments([]);
     }
   };
 
@@ -181,11 +252,11 @@ export default function App() {
         </div>
         <div className="metric-card" style={{borderTop: '3px solid var(--severity-p1)'}}>
           <div className="metric-card__header">
-            <span className="metric-card__label">Open Incidents</span>
+            <span className="metric-card__label">Active Incidents</span>
             <ShieldAlert className="metric-card__icon" size={16} color="var(--severity-p1)" />
           </div>
-          <div className="metric-card__value" style={{color: 'var(--severity-p1)'}}>{stats?.openIncidents ?? '—'}</div>
-          <div className="metric-card__sub">{stats?.unknownIncidents ?? 0} need manual triage</div>
+          <div className="metric-card__value" style={{color: 'var(--severity-p1)'}}>{stats ? (stats.awaitingTriageCount + stats.inProgressCount) : '—'}</div>
+          <div className="metric-card__sub">{stats?.awaitingTriageCount ?? 0} awaiting triage</div>
         </div>
         <div className="metric-card" style={{borderTop: '3px solid var(--accent-emerald)'}}>
           <div className="metric-card__header">
@@ -352,21 +423,51 @@ export default function App() {
                 <h2 className="detail-header__title" style={{marginBottom: 0, display: 'inline-block'}}>{selected.title}</h2>
               </div>
               
-              {selected.status !== 'RESOLVED' && selected.status !== 'FALSE_POSITIVE' && (
-                <div className="action-bar" style={{borderTop: 'none', padding: 0, background: 'transparent'}}>
-                  <button className="btn btn-success" onClick={() => handleResolve(selected.incidentId)}>
-                    <CheckCircle2 size={14} /> Resolve
-                  </button>
-                  <button className="btn btn-dismiss" onClick={() => handleDismiss(selected.incidentId)}>
-                    <XCircle size={14} /> Dismiss
-                  </button>
-                  {selected.rootCause === 'UNKNOWN' && (
+              <div className="action-bar" style={{borderTop: 'none', padding: 0, background: 'transparent'}}>
+                {(selected.status === 'NEW' || selected.status === 'ASSESSING') && (
+                  <span className="ai-processing-indicator">
+                    <span className="spinner" style={{width: '14px', height: '14px'}} /> AI is analyzing this incident...
+                  </span>
+                )}
+                {selected.status === 'AWAITING_TRIAGE' && (
+                  <>
+                    <button className="btn btn-primary" onClick={() => handleRetryAnalysis(selected.incidentId)} disabled={retrying}>
+                      {retrying ? <><span className="spinner" style={{width: '14px', height: '14px'}} /> Retrying...</> : '🔄 Retry AI Analysis'}
+                    </button>
                     <button className="btn btn-warning" onClick={() => setShowModal(true)}>
                       <ShieldAlert size={14} /> Manual Triage
                     </button>
-                  )}
-                </div>
-              )}
+                    <button className="btn" onClick={() => handleDismiss(selected.incidentId)}>
+                      <XCircle size={14} /> Dismiss
+                    </button>
+                  </>
+                )}
+                {selected.status === 'RCA_COMPLETE' && (
+                  <>
+                    <button className="btn btn-success" onClick={() => handleAccept(selected.incidentId)}>
+                      <CheckCircle2 size={14} /> Accept & Work
+                    </button>
+                    <button className="btn" onClick={() => handleDismiss(selected.incidentId)}>
+                      <XCircle size={14} /> Dismiss
+                    </button>
+                  </>
+                )}
+                {selected.status === 'IN_PROGRESS' && (
+                  <>
+                    <button className="btn btn-success" onClick={() => handleResolve(selected.incidentId)}>
+                      <CheckCircle2 size={14} /> Resolve
+                    </button>
+                    <button className="btn" onClick={() => handleDismiss(selected.incidentId)}>
+                      <XCircle size={14} /> Dismiss
+                    </button>
+                  </>
+                )}
+                {selected.status === 'RESOLVED' && (
+                  <button className="btn btn-primary" onClick={() => handleClose(selected.incidentId)}>
+                    🔒 Close Incident
+                  </button>
+                )}
+              </div>
             </div>
 
             {/* Top Level Tabs */}
@@ -385,7 +486,13 @@ export default function App() {
             {/* Tab Content */}
             <div className="detail-content">
               {activeTab === 'details' && (
-                <div className="sn-form-container">
+                <>
+                  {selected.status === 'AWAITING_TRIAGE' && (
+                    <div className="ai-status-banner warning">
+                      ⚠️ AI analysis was unavailable for this incident. Use "Retry AI Analysis" or submit a manual triage report.
+                    </div>
+                  )}
+                  <div className="sn-form-container">
                   {/* ServiceNow Header */}
                   <div className="sn-header-bar">
                     <div className="sn-header-left">
@@ -397,24 +504,27 @@ export default function App() {
 
                   {/* Process Flow Formatter (Stepper) */}
                   <div className="sn-process-flow">
-                    <div className={`sn-flow-step ${selected.status === 'OPEN' ? 'active' : 'completed'}`}>
-                      New
-                    </div>
-                    <div className={`sn-flow-step ${selected.status === 'OPEN' && selected.analyzedAt ? 'active' : selected.status === 'RESOLVED' || selected.status === 'FALSE_POSITIVE' ? 'completed' : ''}`}>
-                      Assess
-                    </div>
-                    <div className={`sn-flow-step ${selected.status === 'OPEN' && selected.analyzedAt ? 'completed' : selected.status === 'RESOLVED' || selected.status === 'FALSE_POSITIVE' ? 'completed' : ''}`}>
-                      Root Cause Analysis
-                    </div>
-                    <div className={`sn-flow-step ${selected.status === 'RESOLVED' || selected.status === 'FALSE_POSITIVE' ? 'completed' : ''}`}>
-                      Fix in Progress
-                    </div>
-                    <div className={`sn-flow-step ${selected.status === 'RESOLVED' ? 'active' : ''}`}>
-                      Resolved
-                    </div>
-                    <div className={`sn-flow-step ${selected.status === 'FALSE_POSITIVE' ? 'active' : ''}`}>
-                      Closed
-                    </div>
+                    {['NEW', 'ASSESSING', 'RCA_COMPLETE', 'IN_PROGRESS', 'RESOLVED', 'CLOSED'].map((step, idx) => {
+                      const statusOrder = ['NEW', 'ASSESSING', 'RCA_COMPLETE', 'IN_PROGRESS', 'RESOLVED', 'CLOSED'];
+                      const currentIdx = selected.status === 'AWAITING_TRIAGE' ? 2 : statusOrder.indexOf(selected.status);
+                      const stepLabels = { NEW: 'New', ASSESSING: 'Assess', RCA_COMPLETE: 'Root Cause Analysis', IN_PROGRESS: 'Fix in Progress', RESOLVED: 'Resolved', CLOSED: 'Closed' };
+                      
+                      let stepClass = '';
+                      if (step === 'RCA_COMPLETE' && selected.status === 'AWAITING_TRIAGE') {
+                        stepClass = 'warning';
+                      } else if (idx < currentIdx) {
+                        stepClass = 'completed';
+                      } else if (idx === currentIdx) {
+                        stepClass = 'active';
+                      }
+                      
+                      return (
+                        <div key={step} className={`sn-flow-step ${stepClass}`}>
+                          {stepClass === 'completed' && <span className="step-check">✓ </span>}
+                          {stepLabels[step]}
+                        </div>
+                      );
+                    })}
                   </div>
 
                   {/* Form Content */}
@@ -463,9 +573,13 @@ export default function App() {
                         <div className="sn-form-group">
                           <label className="sn-label">State</label>
                           <select className="sn-input" value={selected.status} readOnly disabled>
-                            <option value="OPEN">In Progress</option>
+                            <option value="NEW">New</option>
+                            <option value="ASSESSING">Assessing</option>
+                            <option value="RCA_COMPLETE">RCA Complete</option>
+                            <option value="AWAITING_TRIAGE">Awaiting Triage</option>
+                            <option value="IN_PROGRESS">In Progress</option>
                             <option value="RESOLVED">Resolved</option>
-                            <option value="FALSE_POSITIVE">Closed</option>
+                            <option value="CLOSED">Closed</option>
                           </select>
                         </div>
                         <div className="sn-form-group">
@@ -518,6 +632,47 @@ export default function App() {
                     </div>
                   </div>
                 </div>
+
+                {/* Work Notes Section */}
+                {!['NEW', 'ASSESSING'].includes(selected.status) && (
+                  <div className="work-notes-section">
+                    <div className="work-notes-header">
+                      <span className="work-notes-title">💬 Work Notes</span>
+                      <span className="work-notes-count">{comments.length} notes</span>
+                    </div>
+                    
+                    {selected.status !== 'CLOSED' && (
+                      <div className="work-notes-input-area">
+                        <textarea
+                          className="work-notes-textarea"
+                          placeholder="Add a work note..."
+                          value={newComment}
+                          onChange={(e) => setNewComment(e.target.value)}
+                          onKeyDown={(e) => { if (e.key === 'Enter' && e.ctrlKey) handleAddComment(); }}
+                        />
+                        <button className="btn btn-primary work-notes-submit" onClick={handleAddComment} disabled={!newComment.trim()}>
+                          Add Note
+                        </button>
+                      </div>
+                    )}
+                    
+                    <div className="work-notes-list">
+                      {comments.length === 0 && (
+                        <div className="work-notes-empty">No work notes yet. Add one to document your investigation.</div>
+                      )}
+                      {comments.map(c => (
+                        <div key={c.commentId} className="work-note-item">
+                          <div className="work-note-meta">
+                            <span className="work-note-author">{c.author}</span>
+                            <span className="work-note-time">{timeAgo(c.createdAt)}</span>
+                          </div>
+                          <div className="work-note-content">{c.content}</div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                </>
               )}
 
               {activeTab === 'analysis' && (

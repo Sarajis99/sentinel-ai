@@ -15,7 +15,9 @@ import lombok.NoArgsConstructor;
 public class DashboardStatsDTO {
 
     private long totalIncidents;
-    private long openIncidents;
+    private long awaitingTriageCount;
+    private long inProgressCount;
+    private long closedCount;
     private long resolvedIncidents;
     private long unknownIncidents;  // UNKNOWN root cause — needs manual triage
 

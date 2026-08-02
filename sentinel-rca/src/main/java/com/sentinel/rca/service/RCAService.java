@@ -68,17 +68,9 @@ public class RCAService {
         anomalyRecordRepository.updateStatus(anomalyId, "INVESTIGATING");
         log.info("📌 Anomaly {} status → INVESTIGATING", anomaly.getAnomalyId());
 
+        Incident incident = null;
         try {
-            // Step 2: Check cache
-            String cacheKey = cacheService.buildCacheKey(
-                    anomaly.getServiceName(),
-                    anomaly.getAnomalyType().name(),
-                    anomaly.getMetricName()
-            );
-
-            RCAResponse rcaResponse = tryGetFromCache(cacheKey);
-
-            // Step 3: Gather log context (always gather so we can save it in the DB)
+            // Gather log context (always gather so we can save it in the DB)
             List<LogEvent> rawLogs = contextGatherer.gatherRawLogs(anomaly);
             String logContextForPrompt = contextGatherer.formatLogsForPrompt(rawLogs);
             
@@ -89,7 +81,23 @@ public class RCAService {
                 log.warn("Failed to serialize raw logs to JSON", e);
             }
 
+            // Phase 1: Create incident early (before AI)
+            incident = createInitialIncident(anomaly, logContextJson);
+
+            // Step 2: Check cache
+            String cacheKey = cacheService.buildCacheKey(
+                    anomaly.getServiceName(),
+                    anomaly.getAnomalyType().name(),
+                    anomaly.getMetricName()
+            );
+
+            RCAResponse rcaResponse = tryGetFromCache(cacheKey);
+
             if (rcaResponse == null) {
+                // Phase 2: Update to ASSESSING
+                incident.setStatus("ASSESSING");
+                incidentRepository.save(incident);
+
                 // Step 4: Build prompt
                 String prompt = promptBuilder.build(anomaly, logContextForPrompt);
 
@@ -100,8 +108,8 @@ public class RCAService {
                 cacheResponse(cacheKey, rcaResponse);
             }
 
-            // Step 6: Save incident to PostgreSQL
-            Incident incident = saveIncident(anomaly, rcaResponse, logContextJson);
+            // Phase 3: After AI completes
+            updateIncidentWithRCA(incident, rcaResponse);
             log.info("✅ Incident saved: id={} rootCause={} confidence={}",
                     incident.getIncidentId(), rcaResponse.getRootCause(), rcaResponse.getConfidence());
 
@@ -111,8 +119,60 @@ public class RCAService {
 
         } catch (Exception e) {
             log.error("❌ RCA failed for anomaly={}: {}", anomaly.getAnomalyId(), e.getMessage(), e);
-            // Revert status to DETECTED so it can be retried
-            anomalyRecordRepository.updateStatus(anomalyId, "DETECTED");
+            
+            if (incident != null) {
+                incident.setStatus("AWAITING_TRIAGE");
+                incidentRepository.save(incident);
+            } else {
+                // Revert status to DETECTED so it can be retried
+                anomalyRecordRepository.updateStatus(anomalyId, "DETECTED");
+            }
+        }
+    }
+
+    @Transactional
+    public Incident retryRCA(UUID incidentId) {
+        Incident incident = incidentRepository.findByIncidentId(incidentId)
+            .orElseThrow(() -> new IllegalArgumentException("Incident not found: " + incidentId));
+
+        if (!"AWAITING_TRIAGE".equals(incident.getStatus())) {
+            log.info("ℹ️ Incident {} is not AWAITING_TRIAGE. Skipping retry.", incidentId);
+            return incident;
+        }
+
+        com.sentinel.rca.entity.AnomalyRecord record = anomalyRecordRepository.findByAnomalyId(incident.getAnomalyId())
+            .orElseThrow(() -> new IllegalArgumentException("Anomaly not found: " + incident.getAnomalyId()));
+
+        AnomalyDTO anomaly = AnomalyDTO.builder()
+            .anomalyId(record.getAnomalyId().toString())
+            .serviceName(record.getServiceName())
+            .anomalyType(com.sentinel.common.enums.AnomalyType.valueOf(record.getAnomalyType()))
+            .severity(com.sentinel.common.enums.Severity.valueOf(record.getSeverity()))
+            .metricName(record.getMetricName())
+            .detectedAt(record.getDetectedAt())
+            .expectedValue(record.getExpectedValue())
+            .actualValue(record.getActualValue())
+            .zScore(record.getZScore())
+            .windowMinutes(record.getWindowMinutes())
+            .build();
+
+        incident.setStatus("ASSESSING");
+        incidentRepository.save(incident);
+
+        try {
+            List<LogEvent> rawLogs = contextGatherer.gatherRawLogs(anomaly);
+            String logContextForPrompt = contextGatherer.formatLogsForPrompt(rawLogs);
+
+            String prompt = promptBuilder.build(anomaly, logContextForPrompt);
+            RCAResponse rcaResponse = callLLMWithFallback(prompt);
+
+            updateIncidentWithRCA(incident, rcaResponse);
+            return incident;
+        } catch (Exception e) {
+            log.error("❌ Retry RCA failed for incident={}: {}", incidentId, e.getMessage(), e);
+            incident.setStatus("AWAITING_TRIAGE");
+            incidentRepository.save(incident);
+            return incident;
         }
     }
 
@@ -166,29 +226,45 @@ public class RCAService {
         return buildSkippedResponse("Both OpenRouter and Ollama are unavailable");
     }
 
-    private Incident saveIncident(AnomalyDTO anomaly, RCAResponse rca, String logContext) {
+    private Incident createInitialIncident(AnomalyDTO anomaly, String logContext) {
         String generatedIncNumber = String.format("INC%07d", ThreadLocalRandom.current().nextInt(1000000, 10000000));
         
         Incident incident = Incident.builder()
                 .incidentId(UUID.randomUUID())
                 .incidentNumber(generatedIncNumber)
                 .anomalyId(UUID.fromString(anomaly.getAnomalyId()))
-                .title(rca.getTitle())
+                .title("Anomaly detected in " + anomaly.getServiceName() + " — AI analysis pending")
                 .severity(anomaly.getSeverity() != null ? anomaly.getSeverity().name() : "P2")
-                .status("OPEN")
+                .status("NEW")
                 .serviceName(anomaly.getServiceName())
-                .rcaSummary(rca.getRcaSummary())
-                .rootCause(rca.getRootCause())
-                .impactAnalysis(rca.getImpactAnalysis())
-                .suggestedFix(rca.getSuggestedFix())
-                .prevention(rca.getPrevention())
-                .confidence(rca.getConfidence())
                 .detectedAt(anomaly.getDetectedAt())
-                .analyzedAt(LocalDateTime.now())
                 .relatedLogs(logContext)
                 .build();
 
         return incidentRepository.save(incident);
+    }
+
+    private void updateIncidentWithRCA(Incident incident, RCAResponse rca) {
+        if (rca.isParseSuccess() && rca.getConfidence() > 0) {
+            incident.setStatus("RCA_COMPLETE");
+            incident.setTitle(rca.getTitle());
+            incident.setRcaSummary(rca.getRcaSummary());
+            incident.setRootCause(rca.getRootCause());
+            incident.setImpactAnalysis(rca.getImpactAnalysis());
+            incident.setSuggestedFix(rca.getSuggestedFix());
+            incident.setPrevention(rca.getPrevention());
+            incident.setConfidence(rca.getConfidence());
+        } else {
+            incident.setStatus("AWAITING_TRIAGE");
+            incident.setRcaSummary(rca.getRcaSummary());
+            incident.setRootCause(rca.getRootCause());
+            incident.setImpactAnalysis(rca.getImpactAnalysis());
+            incident.setSuggestedFix(rca.getSuggestedFix());
+            incident.setPrevention(rca.getPrevention());
+            incident.setConfidence(rca.getConfidence());
+        }
+        incident.setAnalyzedAt(LocalDateTime.now());
+        incidentRepository.save(incident);
     }
 
     private void cacheResponse(String cacheKey, RCAResponse response) {
