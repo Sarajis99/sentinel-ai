@@ -520,6 +520,8 @@ body { font-family: var(--font-sans); background: var(--bg-primary); color: var(
   flex: 1;
   overflow-y: auto;
   padding: var(--space-lg);
+  display: flex;
+  flex-direction: column;
 }
 
 .rca-grid {
@@ -653,3 +655,221 @@ body { font-family: var(--font-sans); background: var(--bg-primary); color: var(
 }
 
 .health-dot { width: 8px; height: 8px; border-radius: 50%; }
+
+/* ─── ServiceNow Style UI Elements ─── */
+.sn-form-container {
+  background: #ffffff;
+  border: 1px solid #c0c6cc;
+  border-radius: 4px;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+}
+
+.sn-header-bar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 16px;
+  background: #f4f6f8;
+  border-bottom: 1px solid #c0c6cc;
+}
+
+.sn-header-left {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.sn-header-title {
+  font-size: 1.1rem;
+  font-weight: 600;
+  color: #293e40;
+  margin-left: 12px;
+}
+
+.sn-icon-btn-borderless {
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  color: #4a5e68;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 4px;
+  border-radius: 4px;
+}
+.sn-icon-btn-borderless:hover {
+  background: #e6e8ea;
+}
+
+/* Process Flow Formatter */
+.sn-process-flow {
+  display: flex;
+  background: #f4f6f8;
+  border-bottom: 1px solid #c0c6cc;
+  padding: 8px 16px;
+  gap: 2px;
+}
+
+.sn-flow-step {
+  flex: 1;
+  text-align: center;
+  padding: 6px 12px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: #4a5e68;
+  position: relative;
+  background: #e6e8ea;
+  clip-path: polygon(0% 0%, calc(100% - 10px) 0%, 100% 50%, calc(100% - 10px) 100%, 0% 100%, 10px 50%);
+  margin-left: -8px;
+}
+
+.sn-flow-step:first-child {
+  clip-path: polygon(0% 0%, calc(100% - 10px) 0%, 100% 50%, calc(100% - 10px) 100%, 0% 100%);
+  margin-left: 0;
+  padding-left: 16px;
+}
+
+.sn-flow-step.completed {
+  background: #f4f6f8;
+  color: #718096;
+}
+
+.sn-flow-step.active {
+  background: #017766;
+  color: white;
+}
+
+/* Form Layout */
+.sn-form-body {
+  padding: 24px;
+  background: #ffffff;
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+}
+
+.sn-form-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 24px;
+  max-width: 900px;
+}
+
+.sn-form-col {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.sn-form-group {
+  display: flex;
+  align-items: center;
+}
+
+.sn-label {
+  flex: 0 0 140px;
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: #4a5e68;
+  text-align: right;
+  padding-right: 16px;
+}
+
+.sn-label.required::before {
+  content: '*';
+  color: #e0281b;
+  margin-right: 4px;
+}
+
+.sn-input, .sn-textarea, .sn-select {
+  flex: 1;
+  padding: 6px 8px;
+  border: 1px solid #c0c6cc;
+  border-radius: 2px;
+  font-size: 0.8rem;
+  color: #293e40;
+  background: #ffffff;
+  min-width: 0;
+  max-width: 320px;
+}
+
+.sn-input:focus, .sn-textarea:focus, .sn-select:focus {
+  outline: none;
+  border-color: #017766;
+}
+
+.sn-input.sn-readonly, .sn-textarea[readonly], .sn-select:disabled {
+  background-color: #f4f6f8;
+  color: #4a5e68;
+}
+
+.sn-input-group {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  max-width: 320px;
+}
+
+.sn-input-group .sn-input {
+  border-top-right-radius: 0;
+  border-bottom-right-radius: 0;
+  border-right: none;
+  max-width: 100%;
+}
+
+.sn-icon-btn {
+  padding: 6px 10px;
+  background: #ffffff;
+  border: 1px solid #c0c6cc;
+  border-top-right-radius: 2px;
+  border-bottom-right-radius: 2px;
+  color: #4a5e68;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.sn-icon-btn:hover {
+  background: #e6e8ea;
+}
+
+.sn-form-full {
+  margin-top: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  max-width: 900px;
+  flex: 1;
+}
+
+.sn-form-full .sn-form-group:last-child {
+  /* Reverted stretch to keep normal height */
+}
+
+.sn-form-full .sn-input {
+  max-width: 100%;
+}
+
+.sn-form-full .sn-textarea {
+  max-width: 100%;
+  min-height: 120px;
+  resize: vertical;
+}
+
+.incident-number-inline {
+  margin-right: 6px;
+  color: var(--accent-primary);
+  font-family: var(--font-mono);
+}
+
+.incident-number-badge {
+  margin-right: 12px;
+  font-family: var(--font-mono);
+  color: var(--text-muted);
+  font-size: 0.9rem;
+  font-weight: 600;
+}

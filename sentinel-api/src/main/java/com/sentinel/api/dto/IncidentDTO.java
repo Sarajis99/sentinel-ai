@@ -19,6 +19,7 @@ import java.util.UUID;
 public class IncidentDTO {
 
     private UUID incidentId;
+    private String incidentNumber;
     private UUID anomalyId;
     private String title;
     private String severity;

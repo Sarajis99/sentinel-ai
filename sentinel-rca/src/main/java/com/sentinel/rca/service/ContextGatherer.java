@@ -36,7 +36,7 @@ public class ContextGatherer {
      * @param anomaly The anomaly to gather context for
      * @return Formatted log context string to embed in the prompt
      */
-    public String gatherContext(AnomalyDTO anomaly) {
+    public List<LogEvent> gatherRawLogs(AnomalyDTO anomaly) {
         LocalDateTime from = anomaly.getDetectedAt().minusMinutes(windowMinutes);
         LocalDateTime to = anomaly.getDetectedAt().plusMinutes(1); // +1 min after detection
 
@@ -59,13 +59,13 @@ public class ContextGatherer {
 
         log.info("📋 Found {} relevant log entries for context", logsToUse.size());
 
-        return formatLogsForPrompt(logsToUse);
+        return logsToUse;
     }
 
     /**
      * Formats a list of log events into a readable text block for the LLM prompt.
      */
-    private String formatLogsForPrompt(List<LogEvent> logs) {
+    public String formatLogsForPrompt(List<LogEvent> logs) {
         if (logs.isEmpty()) {
             return "No logs found in the detection window.";
         }

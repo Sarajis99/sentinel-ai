@@ -158,6 +158,7 @@ public class IncidentService {
     private IncidentDTO toDTO(Incident entity) {
         return IncidentDTO.builder()
                 .incidentId(entity.getIncidentId())
+                .incidentNumber(entity.getIncidentNumber())
                 .anomalyId(entity.getAnomalyId())
                 .title(entity.getTitle())
                 .severity(entity.getSeverity())

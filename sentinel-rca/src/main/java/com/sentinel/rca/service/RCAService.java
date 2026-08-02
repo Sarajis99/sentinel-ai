@@ -3,6 +3,7 @@ package com.sentinel.rca.service;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.sentinel.common.dto.AnomalyDTO;
 import com.sentinel.rca.entity.Incident;
+import com.sentinel.rca.entity.LogEvent;
 import com.sentinel.rca.llm.LLMClient;
 import com.sentinel.rca.llm.OllamaClient;
 import com.sentinel.rca.llm.OpenRouterClient;
@@ -15,7 +16,9 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
+import java.util.List;
 import java.util.UUID;
+import java.util.concurrent.ThreadLocalRandom;
 
 /**
  * RCAService — the main orchestrator for Phase 3.
@@ -75,12 +78,20 @@ public class RCAService {
 
             RCAResponse rcaResponse = tryGetFromCache(cacheKey);
 
-            if (rcaResponse == null) {
-                // Step 3: Gather log context
-                String logContext = contextGatherer.gatherContext(anomaly);
+            // Step 3: Gather log context (always gather so we can save it in the DB)
+            List<LogEvent> rawLogs = contextGatherer.gatherRawLogs(anomaly);
+            String logContextForPrompt = contextGatherer.formatLogsForPrompt(rawLogs);
+            
+            String logContextJson = "[]";
+            try {
+                logContextJson = objectMapper.writeValueAsString(rawLogs);
+            } catch (Exception e) {
+                log.warn("Failed to serialize raw logs to JSON", e);
+            }
 
+            if (rcaResponse == null) {
                 // Step 4: Build prompt
-                String prompt = promptBuilder.build(anomaly, logContext);
+                String prompt = promptBuilder.build(anomaly, logContextForPrompt);
 
                 // Step 5: Call LLM (with rate limiting + fallback)
                 rcaResponse = callLLMWithFallback(prompt);
@@ -90,7 +101,7 @@ public class RCAService {
             }
 
             // Step 6: Save incident to PostgreSQL
-            Incident incident = saveIncident(anomaly, rcaResponse);
+            Incident incident = saveIncident(anomaly, rcaResponse, logContextJson);
             log.info("✅ Incident saved: id={} rootCause={} confidence={}",
                     incident.getIncidentId(), rcaResponse.getRootCause(), rcaResponse.getConfidence());
 
@@ -155,9 +166,12 @@ public class RCAService {
         return buildSkippedResponse("Both OpenRouter and Ollama are unavailable");
     }
 
-    private Incident saveIncident(AnomalyDTO anomaly, RCAResponse rca) {
+    private Incident saveIncident(AnomalyDTO anomaly, RCAResponse rca, String logContext) {
+        String generatedIncNumber = String.format("INC%07d", ThreadLocalRandom.current().nextInt(1000000, 10000000));
+        
         Incident incident = Incident.builder()
                 .incidentId(UUID.randomUUID())
+                .incidentNumber(generatedIncNumber)
                 .anomalyId(UUID.fromString(anomaly.getAnomalyId()))
                 .title(rca.getTitle())
                 .severity(anomaly.getSeverity() != null ? anomaly.getSeverity().name() : "P2")
@@ -171,6 +185,7 @@ public class RCAService {
                 .confidence(rca.getConfidence())
                 .detectedAt(anomaly.getDetectedAt())
                 .analyzedAt(LocalDateTime.now())
+                .relatedLogs(logContext)
                 .build();
 
         return incidentRepository.save(incident);

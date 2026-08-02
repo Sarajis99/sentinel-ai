@@ -10,7 +10,10 @@ import {
   XCircle,
   Clock,
   ShieldAlert,
-  Play
+  Play,
+  Search,
+  Menu,
+  ChevronLeft
 } from 'lucide-react';
 import { 
   AreaChart, 
@@ -56,7 +59,7 @@ export default function App() {
   const [incidents, setIncidents] = useState([]);
   const [page, setPage] = useState(0);
   const [selected, setSelected] = useState(null);
-  const [activeTab, setActiveTab] = useState('analysis');
+  const [activeTab, setActiveTab] = useState('details');
   const [stats, setStats] = useState(null);
   const [health, setHealth] = useState(null);
   const [toasts, setToasts] = useState([]);
@@ -158,7 +161,7 @@ export default function App() {
     try {
       const full = await api.getIncident(inc.incidentId);
       setSelected(full);
-      setActiveTab('analysis');
+      setActiveTab('details');
     } catch {
       setSelected(inc);
     }
@@ -276,7 +279,10 @@ export default function App() {
           {incidents.slice(0, 5).map(inc => (
             <div key={inc.incidentId} className="feed-item" onClick={() => { setCurrentView('incidents'); handleSelectIncident(inc); }}>
               <div className="feed-item__header">
-                <span className="feed-item__title">{inc.title || 'Untitled Incident'}</span>
+                <span className="feed-item__title">
+                  <span className="incident-number-inline">{inc.incidentNumber || 'INC-NEW'}</span> 
+                  {inc.title || 'Untitled Incident'}
+                </span>
                 <span className={`badge badge-${inc.severity?.toLowerCase()}`}>{inc.severity}</span>
               </div>
               <div className="feed-item__meta">
@@ -315,7 +321,10 @@ export default function App() {
               onClick={() => handleSelectIncident(inc)}
             >
               <div className="feed-item__header">
-                <span className="feed-item__title">{inc.title || 'Untitled Incident'}</span>
+                <span className="feed-item__title">
+                  <span className="incident-number-inline">{inc.incidentNumber || 'INC-NEW'}</span>
+                  {inc.title || 'Untitled Incident'}
+                </span>
                 <span className={`badge badge-${inc.severity?.toLowerCase()}`}>{inc.severity}</span>
               </div>
               <div className="feed-item__meta">
@@ -337,18 +346,34 @@ export default function App() {
           </div>
         ) : (
           <>
-            <div className="detail-header">
-              <h2 className="detail-header__title">{selected.title}</h2>
-              <div className="detail-header__meta">
-                <span className={`badge badge-${selected.severity?.toLowerCase()}`}>{selected.severity}</span>
-                <span className={`badge badge-${selected.status?.toLowerCase()?.replace('_', '-')}`}>{selected.status}</span>
-                <span className={getServiceClass(selected.serviceName)}>{selected.serviceName}</span>
-                <span style={{color: 'var(--text-muted)', fontSize: '0.75rem', fontWeight: 500}}>{formatDate(selected.detectedAt)}</span>
+            <div className="detail-header" style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center'}}>
+              <div className="detail-header__top" style={{marginBottom: 0}}>
+                <span className="incident-number-badge">{selected.incidentNumber || 'INC-NEW'}</span>
+                <h2 className="detail-header__title" style={{marginBottom: 0, display: 'inline-block'}}>{selected.title}</h2>
               </div>
+              
+              {selected.status !== 'RESOLVED' && selected.status !== 'FALSE_POSITIVE' && (
+                <div className="action-bar" style={{borderTop: 'none', padding: 0, background: 'transparent'}}>
+                  <button className="btn btn-success" onClick={() => handleResolve(selected.incidentId)}>
+                    <CheckCircle2 size={14} /> Resolve
+                  </button>
+                  <button className="btn btn-dismiss" onClick={() => handleDismiss(selected.incidentId)}>
+                    <XCircle size={14} /> Dismiss
+                  </button>
+                  {selected.rootCause === 'UNKNOWN' && (
+                    <button className="btn btn-warning" onClick={() => setShowModal(true)}>
+                      <ShieldAlert size={14} /> Manual Triage
+                    </button>
+                  )}
+                </div>
+              )}
             </div>
 
-            {/* Tabs */}
+            {/* Top Level Tabs */}
             <div className="tabs">
+              <button className={`tab ${activeTab === 'details' ? 'active' : ''}`} onClick={() => setActiveTab('details')}>
+                Incident Details
+              </button>
               <button className={`tab ${activeTab === 'analysis' ? 'active' : ''}`} onClick={() => setActiveTab('analysis')}>
                 AI Analysis
               </button>
@@ -359,90 +384,202 @@ export default function App() {
 
             {/* Tab Content */}
             <div className="detail-content">
-              {activeTab === 'analysis' ? (
-                <div className="rca-grid">
-                  <div>
-                    <div className="rca-section__label">Root Cause</div>
-                    <div className="rca-section__text">{selected.rootCause || 'Not determined'}</div>
-                  </div>
-                  <div>
-                    <div className="rca-section__label">Summary</div>
-                    <div className="rca-section__text">{selected.rcaSummary || 'No summary available'}</div>
-                  </div>
-                  <div>
-                    <div className="rca-section__label">Impact Analysis</div>
-                    <div className="rca-section__text">{selected.impactAnalysis || 'Not assessed'}</div>
-                  </div>
-                  <div>
-                    <div className="rca-section__label">Suggested Fix</div>
-                    <div className="rca-section__text">{selected.suggestedFix || 'No fix suggested'}</div>
-                  </div>
-                  <div>
-                    <div className="rca-section__label">Prevention</div>
-                    <div className="rca-section__text">{selected.prevention || 'No prevention steps'}</div>
-                  </div>
-                  <div>
-                    <div className="rca-section__label">AI Confidence</div>
-                    <div className="confidence-bar">
-                      <div
-                        className={`confidence-bar__fill ${(selected.confidence ?? 0) >= 0.7 ? 'confidence-high' : (selected.confidence ?? 0) >= 0.4 ? 'confidence-medium' : 'confidence-low'}`}
-                        style={{ width: `${(selected.confidence ?? 0) * 100}%` }}
-                      />
-                    </div>
-                    <div style={{fontSize: '0.7rem', color: 'var(--text-muted)', marginTop: '4px', fontWeight: 600}}>
-                      {((selected.confidence ?? 0) * 100).toFixed(0)}% CONFIDENCE
+              {activeTab === 'details' && (
+                <div className="sn-form-container">
+                  {/* ServiceNow Header */}
+                  <div className="sn-header-bar">
+                    <div className="sn-header-left">
+                      <button className="sn-icon-btn-borderless"><ChevronLeft size={18} /></button>
+                      <button className="sn-icon-btn-borderless"><Menu size={18} /></button>
+                      <span className="sn-header-title">Incident {selected.incidentNumber || 'INC-NEW'}</span>
                     </div>
                   </div>
-                  {selected.resolvedAt && (
-                    <div style={{marginTop: '12px'}}>
-                      <div className="rca-section__label">Resolution</div>
-                      <div className="rca-section__text">
-                        Resolved: {formatDate(selected.resolvedAt)}
-                        {selected.mttrSeconds && ` | MTTR: ${formatMTTR(selected.mttrSeconds)}`}
+
+                  {/* Process Flow Formatter (Stepper) */}
+                  <div className="sn-process-flow">
+                    <div className={`sn-flow-step ${selected.status === 'OPEN' ? 'active' : 'completed'}`}>
+                      New
+                    </div>
+                    <div className={`sn-flow-step ${selected.status === 'OPEN' && selected.analyzedAt ? 'active' : selected.status === 'RESOLVED' || selected.status === 'FALSE_POSITIVE' ? 'completed' : ''}`}>
+                      Assess
+                    </div>
+                    <div className={`sn-flow-step ${selected.status === 'OPEN' && selected.analyzedAt ? 'completed' : selected.status === 'RESOLVED' || selected.status === 'FALSE_POSITIVE' ? 'completed' : ''}`}>
+                      Root Cause Analysis
+                    </div>
+                    <div className={`sn-flow-step ${selected.status === 'RESOLVED' || selected.status === 'FALSE_POSITIVE' ? 'completed' : ''}`}>
+                      Fix in Progress
+                    </div>
+                    <div className={`sn-flow-step ${selected.status === 'RESOLVED' ? 'active' : ''}`}>
+                      Resolved
+                    </div>
+                    <div className={`sn-flow-step ${selected.status === 'FALSE_POSITIVE' ? 'active' : ''}`}>
+                      Closed
+                    </div>
+                  </div>
+
+                  {/* Form Content */}
+                  <div className="sn-form-body">
+                    <div className="sn-form-grid">
+                      {/* Left Column */}
+                      <div className="sn-form-col">
+                        <div className="sn-form-group">
+                          <label className="sn-label">Number</label>
+                          <input type="text" className="sn-input sn-readonly" value={selected.incidentNumber || 'INC-NEW'} readOnly />
+                        </div>
+                        <div className="sn-form-group">
+                          <label className="sn-label">Caller</label>
+                          <div className="sn-input-group">
+                            <input type="text" className="sn-input" value="Sentinel Detector" readOnly />
+                            <button className="sn-icon-btn"><Search size={14} /></button>
+                          </div>
+                        </div>
+                        <div className="sn-form-group">
+                          <label className="sn-label">Category</label>
+                          <select className="sn-input" defaultValue="Software">
+                            <option>Software</option>
+                            <option>Hardware</option>
+                            <option>Network</option>
+                          </select>
+                        </div>
+                        <div className="sn-form-group">
+                          <label className="sn-label">Subcategory</label>
+                          <select className="sn-input" defaultValue="Microservice">
+                            <option>Microservice</option>
+                            <option>Database</option>
+                            <option>Internal</option>
+                          </select>
+                        </div>
+                        <div className="sn-form-group">
+                          <label className="sn-label">Configuration item</label>
+                          <div className="sn-input-group">
+                            <input type="text" className="sn-input" value={selected.serviceName} readOnly />
+                            <button className="sn-icon-btn"><Search size={14} /></button>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Right Column */}
+                      <div className="sn-form-col">
+                        <div className="sn-form-group">
+                          <label className="sn-label">State</label>
+                          <select className="sn-input" value={selected.status} readOnly disabled>
+                            <option value="OPEN">In Progress</option>
+                            <option value="RESOLVED">Resolved</option>
+                            <option value="FALSE_POSITIVE">Closed</option>
+                          </select>
+                        </div>
+                        <div className="sn-form-group">
+                          <label className="sn-label">Impact</label>
+                          <select className="sn-input" defaultValue={selected.severity === 'P1' ? '1 - High' : selected.severity === 'P2' ? '2 - Medium' : '3 - Low'}>
+                            <option>1 - High</option>
+                            <option>2 - Medium</option>
+                            <option>3 - Low</option>
+                          </select>
+                        </div>
+                        <div className="sn-form-group">
+                          <label className="sn-label">Urgency</label>
+                          <select className="sn-input" defaultValue={selected.severity === 'P1' ? '1 - High' : selected.severity === 'P2' ? '2 - Medium' : '3 - Low'}>
+                            <option>1 - High</option>
+                            <option>2 - Medium</option>
+                            <option>3 - Low</option>
+                          </select>
+                        </div>
+                        <div className="sn-form-group">
+                          <label className="sn-label">Priority</label>
+                          <input type="text" className="sn-input sn-readonly" value={selected.severity === 'P1' ? '1 - Critical' : selected.severity === 'P2' ? '2 - High' : '3 - Moderate'} readOnly />
+                        </div>
+                        <div className="sn-form-group">
+                          <label className="sn-label">Assignment group</label>
+                          <div className="sn-input-group">
+                            <input type="text" className="sn-input" value="Sentinel AI Triage" readOnly />
+                            <button className="sn-icon-btn"><Search size={14} /></button>
+                          </div>
+                        </div>
+                        <div className="sn-form-group">
+                          <label className="sn-label">Assigned to</label>
+                          <div className="sn-input-group">
+                            <input type="text" className="sn-input" value="Auto-Remediation Bot" readOnly />
+                            <button className="sn-icon-btn"><Search size={14} /></button>
+                          </div>
+                        </div>
                       </div>
                     </div>
-                  )}
-                </div>
-              ) : (
-                <div className="raw-logs">
-                  {(() => {
-                    if (!selected.relatedLogs || selected.relatedLogs === '[]' || selected.relatedLogs.trim() === '') {
-                      return 'No raw logs available for this incident. This is normal if the incident was generated before the log ingestion pipeline was active.';
-                    }
-                    try {
-                      const parsed = JSON.parse(selected.relatedLogs);
-                      if (!Array.isArray(parsed)) return selected.relatedLogs;
-                      return parsed.map((log, idx) => (
-                        <div key={idx} style={{marginBottom: '8px', paddingBottom: '8px', borderBottom: '1px solid #e2e8f0'}}>
-                          <span style={{color: '#64748b', marginRight: '8px'}}>[{log.timestamp || log.time || '—'}]</span>
-                          <span style={{color: log.level === 'ERROR' ? '#ef4444' : log.level === 'WARN' ? '#f59e0b' : '#3b82f6', fontWeight: 600}}>{log.level || 'INFO'}</span>
-                          <span style={{marginLeft: '8px'}}>{log.message || JSON.stringify(log)}</span>
-                        </div>
-                      ));
-                    } catch (e) {
-                      return selected.relatedLogs;
-                    }
-                  })()}
+
+                    {/* Full Width Fields */}
+                    <div className="sn-form-full">
+                      <div className="sn-form-group">
+                        <label className="sn-label required">Short description</label>
+                        <input type="text" className="sn-input" value={selected.title} readOnly />
+                      </div>
+                      <div className="sn-form-group">
+                        <label className="sn-label">Description</label>
+                        <textarea className="sn-textarea" readOnly value={`Source Anomaly ID: ${selected.anomalyId}\nDetected At: ${formatDate(selected.detectedAt)}\nAnalyzed At: ${formatDate(selected.analyzedAt)}\n\nAutomated Incident created by Sentinel AI. This incident was generated due to an anomaly in ${selected.serviceName}.`} />
+                      </div>
+                    </div>
+                  </div>
                 </div>
               )}
-            </div>
 
-            {/* Action Bar */}
-            {selected.status !== 'RESOLVED' && selected.status !== 'FALSE_POSITIVE' && (
-              <div className="action-bar">
-                <button className="btn btn-success" onClick={() => handleResolve(selected.incidentId)}>
-                  <CheckCircle2 size={14} /> Resolve
-                </button>
-                <button className="btn btn-dismiss" onClick={() => handleDismiss(selected.incidentId)}>
-                  <XCircle size={14} /> Dismiss
-                </button>
-                {selected.rootCause === 'UNKNOWN' && (
-                  <button className="btn btn-warning" onClick={() => setShowModal(true)}>
-                    <ShieldAlert size={14} /> Manual Triage
-                  </button>
+              {activeTab === 'analysis' && (
+                  <div className="rca-grid" style={{marginTop: '16px'}}>
+                    <div>
+                      <div className="rca-section__label">Root Cause</div>
+                      <div className="rca-section__text">{selected.rootCause || 'Not determined'}</div>
+                    </div>
+                    <div>
+                      <div className="rca-section__label">Summary</div>
+                      <div className="rca-section__text">{selected.rcaSummary || 'No summary available'}</div>
+                    </div>
+                    <div>
+                      <div className="rca-section__label">Impact Analysis</div>
+                      <div className="rca-section__text">{selected.impactAnalysis || 'Not assessed'}</div>
+                    </div>
+                    <div>
+                      <div className="rca-section__label">Suggested Fix</div>
+                      <div className="rca-section__text">{selected.suggestedFix || 'No fix suggested'}</div>
+                    </div>
+                    <div>
+                      <div className="rca-section__label">Prevention</div>
+                      <div className="rca-section__text">{selected.prevention || 'No prevention steps'}</div>
+                    </div>
+                    <div>
+                      <div className="rca-section__label">AI Confidence</div>
+                      <div className="confidence-bar">
+                        <div
+                          className={`confidence-bar__fill ${(selected.confidence ?? 0) >= 0.7 ? 'confidence-high' : (selected.confidence ?? 0) >= 0.4 ? 'confidence-medium' : 'confidence-low'}`}
+                          style={{ width: `${(selected.confidence ?? 0) * 100}%` }}
+                        />
+                      </div>
+                      <div style={{fontSize: '0.7rem', color: 'var(--text-muted)', marginTop: '4px', fontWeight: 600}}>
+                        {((selected.confidence ?? 0) * 100).toFixed(0)}% CONFIDENCE
+                      </div>
+                    </div>
+                  </div>
+              )}
+
+              {activeTab === 'raw' && (
+                  <div className="raw-logs" style={{marginTop: '16px'}}>
+                    {(() => {
+                      if (!selected.relatedLogs || selected.relatedLogs === '[]' || selected.relatedLogs.trim() === '') {
+                        return 'No raw logs available for this incident.';
+                      }
+                      try {
+                        const parsed = JSON.parse(selected.relatedLogs);
+                        if (!Array.isArray(parsed)) return selected.relatedLogs;
+                        return parsed.map((log, idx) => (
+                          <div key={idx} style={{marginBottom: '8px', paddingBottom: '8px', borderBottom: '1px solid #e2e8f0'}}>
+                            <span style={{color: '#64748b', marginRight: '8px'}}>[{log.timestamp || log.time || '—'}]</span>
+                            <span style={{color: log.level === 'ERROR' ? '#ef4444' : log.level === 'WARN' ? '#f59e0b' : '#3b82f6', fontWeight: 600}}>{log.level || 'INFO'}</span>
+                            <span style={{marginLeft: '8px'}}>{log.message || JSON.stringify(log)}</span>
+                          </div>
+                        ));
+                      } catch (e) {
+                        return selected.relatedLogs;
+                      }
+                    })()}
+                  </div>
                 )}
               </div>
-            )}
           </>
         )}
       </div>

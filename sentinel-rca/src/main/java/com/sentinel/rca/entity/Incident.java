@@ -28,6 +28,9 @@ public class Incident {
     @Column(name = "incident_id", nullable = false, unique = true)
     private UUID incidentId;
 
+    @Column(name = "incident_number", unique = true, length = 20)
+    private String incidentNumber;
+
     @Column(name = "anomaly_id")
     private UUID anomalyId;
 
