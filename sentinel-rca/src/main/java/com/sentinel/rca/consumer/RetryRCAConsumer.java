@@ -23,6 +23,10 @@ public class RetryRCAConsumer {
     )
     public void consume(ConsumerRecord<String, String> record) {
         String incidentIdStr = record.value();
+        // Remove surrounding quotes added by JsonSerializer
+        if (incidentIdStr.startsWith("\"") && incidentIdStr.endsWith("\"")) {
+            incidentIdStr = incidentIdStr.substring(1, incidentIdStr.length() - 1);
+        }
         log.info("📥 Received retry event for incident: {}", incidentIdStr);
         try {
             UUID incidentId = UUID.fromString(incidentIdStr);

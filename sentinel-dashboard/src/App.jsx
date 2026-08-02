@@ -193,16 +193,38 @@ export default function App() {
     try {
       setRetrying(true);
       await api.retryAnalysis(id);
-      addToast('AI analysis retry queued — refreshing in a few seconds...', 'info');
-      // Poll for updated status after a delay
-      setTimeout(async () => {
+      addToast('AI analysis retry started...', 'info');
+      
+      // Optimistically update UI to show spinner
+      if (selected && selected.incidentId === id) {
+        setSelected(prev => ({ ...prev, status: 'ASSESSING' }));
+      }
+
+      let attempts = 0;
+      let wasAssessing = false;
+      
+      const pollInterval = setInterval(async () => {
+        attempts++;
         try {
           const updated = await api.getIncident(id);
-          setSelected(updated);
-          loadData();
+          
+          if (updated.status === 'ASSESSING') {
+            wasAssessing = true;
+            setSelected(updated);
+          } else if (updated.status === 'RCA_COMPLETE' || (wasAssessing && updated.status === 'AWAITING_TRIAGE') || attempts > 15) {
+            clearInterval(pollInterval);
+            setSelected(updated);
+            loadData();
+            setRetrying(false);
+            
+            if (updated.status === 'RCA_COMPLETE') {
+              addToast('AI analysis complete!', 'success');
+            } else if (updated.status === 'AWAITING_TRIAGE') {
+              addToast('AI analysis failed again.', 'error');
+            }
+          }
         } catch (e) { /* ignore */ }
-        setRetrying(false);
-      }, 8000);
+      }, 2000);
     } catch (err) {
       addToast(err.message, 'error');
       setRetrying(false);
@@ -263,7 +285,7 @@ export default function App() {
             <span className="metric-card__label">Resolved</span>
             <CheckCircle2 className="metric-card__icon" size={16} color="var(--accent-emerald)" />
           </div>
-          <div className="metric-card__value" style={{color: 'var(--accent-emerald)'}}>{stats?.resolvedIncidents ?? '—'}</div>
+          <div className="metric-card__value" style={{color: 'var(--accent-emerald)'}}>{stats ? (stats.resolvedIncidents + stats.closedCount) : '—'}</div>
           <div className="metric-card__sub">Avg MTTR: {formatMTTR(stats?.averageMttrSeconds)}</div>
         </div>
         <div className="metric-card">
