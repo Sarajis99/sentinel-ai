@@ -96,6 +96,29 @@ class MovingAverageAnalyserTest {
         assertEquals(Severity.P1, result.get().getSeverity());
     }
 
+    @Test
+    void testComputeMean_skipsMalformedMembers() {
+        Set<String> malformedWindow = new LinkedHashSet<>();
+        malformedWindow.add("100:1000:0.1"); // valid
+        malformedWindow.add("malformed:1001:0.2"); // invalid
+        malformedWindow.add("200:1002:0.3"); // valid
+
+        Set<String> longWindow = createMembersWithValue(5, "100");
+
+        when(zSetOps.rangeByScore(anyString(), anyDouble(), anyDouble()))
+                .thenReturn(malformedWindow)
+                .thenReturn(longWindow);
+
+        // short mean will be (100+200)/2 = 150
+        // long mean will be 100
+        // deviation = 50% => P2 threshold
+        Optional<AnomalySignal> result = analyser.analyse("payment-service");
+
+        assertTrue(result.isPresent());
+        assertEquals(150.0, result.get().getActualValue(), 0.1);
+        assertEquals(Severity.P2, result.get().getSeverity());
+    }
+
     // ─── Helpers ─────────────────────────────────────────────────────────────
 
     private Set<String> createMembersWithValue(int count, String value) {

@@ -105,4 +105,13 @@ class ErrorRateAnalyserTest {
         Optional<AnomalySignal> result = analyser.analyse("payment-service");
         assertTrue(result.isEmpty());
     }
+
+    @Test
+    void testNoAnomaly_invalidNumberFormat_requestCount() {
+        when(hashOps.get(anyString(), eq("error_rate"))).thenReturn("0.1");
+        when(hashOps.get(anyString(), eq("request_count"))).thenReturn("not-a-number");
+
+        Optional<AnomalySignal> result = analyser.analyse("payment-service");
+        assertTrue(result.isEmpty());
+    }
 }

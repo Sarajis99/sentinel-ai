@@ -107,6 +107,26 @@ class RealTimeMetricsServiceTest {
     }
 
     @Test
+    void testUpdateMetrics429() {
+        LogEventDTO event = LogEventDTO.builder()
+                .serviceName("order-service")
+                .logLevel(LogLevel.WARN)
+                .statusCode(429)
+                .build();
+
+        when(zSetOperations.count(eq("metrics:order-service:request_count"), any(Double.class), any(Double.class)))
+                .thenReturn(10L);
+        when(zSetOperations.count(eq("metrics:order-service:error_count"), any(Double.class), any(Double.class)))
+                .thenReturn(0L);
+
+        metricsService.updateMetrics(event);
+
+        // Verify count added
+        verify(zSetOperations, times(1)).add(eq("metrics:order-service:request_count"), any(String.class), any(Double.class));
+        verify(zSetOperations, times(1)).add(eq("metrics:order-service:error_429_count"), any(String.class), any(Double.class));
+    }
+
+    @Test
     void testGetErrorRate() {
         when(hashOperations.get("health:payment-service", "error_rate")).thenReturn("0.1234");
         double rate = metricsService.getErrorRate("payment-service");

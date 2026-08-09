@@ -108,4 +108,18 @@ class ZScoreAnalyserTest {
         Optional<AnomalySignal> result = analyser.analyse("order-service", "latency_ms");
         assertTrue(result.isEmpty());
     }
+
+    @Test
+    void testAnomaly_skipsMalformedMembers() {
+        Set<String> members = new LinkedHashSet<>();
+        members.add("100:1000:0.1");
+        members.add("malformed:1001:0.2");
+        members.add("not-a-number:1002:0.3");
+
+        // The parser filters NaNs, so we end up with 1 value, which is < 2. Returns empty.
+        when(zSetOps.rangeByScore(anyString(), anyDouble(), anyDouble())).thenReturn(members);
+
+        Optional<AnomalySignal> result = analyser.analyse("payment-service", "latency_ms");
+        assertTrue(result.isEmpty());
+    }
 }

@@ -135,6 +135,28 @@ class AnomalyPublisherTest {
 
     @Test
     @SuppressWarnings("unchecked")
+    void testPublish_dbSaveFailure_continuesToPublishKafka() {
+        AnomalySignal signal = AnomalySignal.builder()
+                .serviceName("payment-service")
+                .metricName("error_rate")
+                .severity(Severity.P1)
+                .build();
+
+        doThrow(new RuntimeException("DB down")).when(anomalyRepository).save(any(Anomaly.class));
+
+        CompletableFuture<SendResult<String, AnomalyDTO>> future =
+                CompletableFuture.completedFuture(mock(SendResult.class));
+        when(kafkaTemplate.send(anyString(), anyString(), any())).thenReturn(future);
+
+        // Should not throw
+        assertDoesNotThrow(() -> publisher.publish(signal));
+
+        // Verify Kafka was still called
+        verify(kafkaTemplate, times(1)).send(eq("anomaly-events"), eq("payment-service"), any(AnomalyDTO.class));
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
     void testPublish_unknownMetricMapsToAvailabilityDrop() {
         AnomalySignal signal = AnomalySignal.builder()
                 .serviceName("user-service")

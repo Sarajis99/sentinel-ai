@@ -101,4 +101,21 @@ class LogEventConsumerTest {
         verify(repository, times(1)).save(any(LogEvent.class));
         verify(metricsService, times(1)).updateMetrics(dto);
     }
+
+    @Test
+    void testConsumeLogEventParsingError() {
+        LogEventDTO dto = LogEventDTO.builder()
+                .eventId("invalid-uuid") // will fail UUID.fromString
+                .serviceName("payment-service")
+                .logLevel(LogLevel.INFO)
+                .message("Payment processed")
+                .build();
+
+        // Should handle exception and not propagate
+        consumer.consume(dto, 0, 101L);
+
+        // Verify nothing saved or updated
+        verify(repository, never()).save(any(LogEvent.class));
+        verify(metricsService, never()).updateMetrics(any());
+    }
 }

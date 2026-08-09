@@ -115,8 +115,29 @@ class AnomalyDetectorTest {
 
         int count = detector.runDetectionForService("payment-service");
 
-        // error_rate + latency_moving_avg + 3 z-score metrics = 5
-        assertEquals(5, count);
+        // error_rate + latency_moving_avg + 4 z-score metrics = 6
+        assertEquals(6, count);
+    }
+
+    @Test
+    void testRunDetection_multipleServices() {
+        AnomalySignal signal1 = buildSignal("payment-service", "error_rate");
+        AnomalySignal signal2 = buildSignal("order-service", "latency_moving_avg");
+
+        when(errorRateAnalyser.analyse("payment-service")).thenReturn(Optional.of(signal1));
+        when(movingAverageAnalyser.analyse("order-service")).thenReturn(Optional.of(signal2));
+        when(errorRateAnalyser.analyse(argThat(s -> !s.equals("payment-service")))).thenReturn(Optional.empty());
+        when(movingAverageAnalyser.analyse(argThat(s -> !s.equals("order-service")))).thenReturn(Optional.empty());
+        when(zScoreAnalyser.analyse(anyString(), anyString())).thenReturn(Optional.empty());
+
+        detector.runDetection();
+
+        verify(publisher, times(1)).publish(signal1);
+        verify(publisher, times(1)).publish(signal2);
+        
+        // Verifies dedup is set for both
+        verify(valueOps, times(1)).set(eq("dedup:anomaly:payment-service:error_rate"), eq("1"));
+        verify(valueOps, times(1)).set(eq("dedup:anomaly:order-service:latency_moving_avg"), eq("1"));
     }
 
     // ─── Helpers ─────────────────────────────────────────────────────────────
