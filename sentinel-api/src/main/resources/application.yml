@@ -65,3 +65,5 @@ logging:
     com.sentinel.api: INFO
     org.apache.kafka: WARN
     org.hibernate.SQL: WARN
+
+SETTINGS_ENCRYPTION_KEY: sentinel-ai-default-encryption-key-32b

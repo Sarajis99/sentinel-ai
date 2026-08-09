@@ -41,13 +41,35 @@ public class SimulationController {
         if (started) {
             return ResponseEntity.ok(Map.of(
                     "status", "started",
-                    "message", "Simulation started! A 2-minute anomaly burst is running.",
-                    "durationSeconds", 120
+                    "message", "Simulation started! Normal traffic is flowing."
             ));
         } else {
             return ResponseEntity.status(HttpStatus.CONFLICT).body(Map.of(
                     "status", "already_running",
-                    "message", "A simulation is already running. Please wait for it to complete, or watch the live feed."
+                    "message", "A simulation is already running."
+            ));
+        }
+    }
+
+    /**
+     * POST /api/v1/system/simulate/stop
+     * Stops the running simulation.
+     */
+    @PostMapping("/simulate/stop")
+    public ResponseEntity<Map<String, Object>> stopSimulation() {
+        log.info("🛑 POST /system/simulate/stop — Attempting to stop simulation");
+
+        boolean stopped = simulationService.stopSimulation();
+
+        if (stopped) {
+            return ResponseEntity.ok(Map.of(
+                    "status", "stopped",
+                    "message", "Simulation stopped."
+            ));
+        } else {
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(Map.of(
+                    "status", "not_running",
+                    "message", "No simulation is currently running."
             ));
         }
     }

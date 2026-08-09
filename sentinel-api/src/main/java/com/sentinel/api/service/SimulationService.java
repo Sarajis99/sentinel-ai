@@ -4,29 +4,31 @@ import com.sentinel.common.dto.LogEventDTO;
 import com.sentinel.common.enums.LogLevel;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.stereotype.Service;
 
 import java.time.Duration;
 import java.time.LocalDateTime;
-import java.util.*;
+import java.util.List;
+import java.util.Map;
+import java.util.Random;
+import java.util.UUID;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 
 /**
- * SimulationService — manages the Global Lock + 2-minute time-boxed simulation.
+ * SimulationService — manages the continuous normal traffic generation.
  *
  * When triggered:
- * 1. Acquires a Redis lock (prevents concurrent simulations)
- * 2. Sends normal traffic for 30 seconds
- * 3. Injects a massive ERROR spike (the anomaly)
- * 4. Returns to normal traffic for remaining time
- * 5. Auto-stops after 2 minutes, lock expires
+ * 1. Acquires a Redis lock (prevents concurrent simulations) with 15 min TTL
+ * 2. Starts scheduled normal traffic generation based on logsPerSecond setting
  *
- * This follows the industry-standard "Shared Staging + Chaos Engineering" pattern.
+ * When stopped:
+ * 1. Cancels scheduled task
+ * 2. Deletes Redis lock
  */
 @Slf4j
 @Service
@@ -37,47 +39,69 @@ public class SimulationService {
     private final KafkaTemplate<String, LogEventDTO> kafkaTemplate;
 
     private static final String LOCK_KEY = "simulator:active_lock";
+    private static final String LOGS_PER_SECOND_KEY = "simulator:logs-per-second";
     private static final String TOPIC = "log-events";
     private static final List<String> SERVICES = List.of(
             "payment-service", "order-service", "inventory-service",
             "notification-service", "user-service"
     );
 
-    private final ScheduledExecutorService executor = Executors.newSingleThreadScheduledExecutor();
+    private final ScheduledExecutorService executor = Executors.newScheduledThreadPool(2);
     private final Random random = new Random();
-
-    @Value("${simulation.lock-duration-seconds:150}")
-    private int lockDurationSeconds;
+    private ScheduledFuture<?> simulationTask;
+    private ScheduledFuture<?> autoStopTask;
 
     /**
      * Attempt to start a simulation. Returns true if started, false if one is already running.
      */
     public boolean triggerSimulation() {
-        // Try to acquire global lock
         Boolean acquired = redisTemplate.opsForValue()
-                .setIfAbsent(LOCK_KEY, "running", Duration.ofSeconds(lockDurationSeconds));
+                .setIfAbsent(LOCK_KEY, "running", Duration.ofMinutes(15));
 
         if (Boolean.FALSE.equals(acquired)) {
             log.warn("⚠️ Simulation already active — rejecting concurrent request");
             return false;
         }
 
-        log.info("🚀 === SIMULATION STARTED === Lock acquired for {}s", lockDurationSeconds);
+        int logsPerSecond = 5;
+        String logsPerSecondStr = redisTemplate.opsForValue().get(LOGS_PER_SECOND_KEY);
+        if (logsPerSecondStr != null) {
+            try {
+                logsPerSecond = Integer.parseInt(logsPerSecondStr);
+            } catch (NumberFormatException ignored) {}
+        }
+        long periodMs = 1000L / Math.max(1, logsPerSecond);
 
-        // Phase 1 (0-30s): Normal traffic background
-        executor.submit(this::sendNormalTrafficBurst);
+        log.info("🚀 === SIMULATION STARTED === Normal traffic at {} logs/sec ({} ms interval). Lock acquired for 15m", logsPerSecond, periodMs);
 
-        // Phase 2 (30s): Inject anomaly spike
-        executor.schedule(this::injectAnomalyBurst, 30, TimeUnit.SECONDS);
+        simulationTask = executor.scheduleAtFixedRate(this::generateSingleEvent, 0, periodMs, TimeUnit.MILLISECONDS);
+        autoStopTask = executor.schedule(() -> {
+            log.info("⏳ 15-minute safety timeout reached. Auto-stopping simulation.");
+            stopSimulation();
+        }, 15, TimeUnit.MINUTES);
 
-        // Phase 3 (31-120s): Normal traffic continues
-        executor.schedule(this::sendNormalTrafficBurst, 35, TimeUnit.SECONDS);
+        return true;
+    }
 
-        // Auto-cleanup after simulation ends
-        executor.schedule(() -> {
-            log.info("🏁 === SIMULATION COMPLETE === Auto-stopped after 2 minutes");
-        }, lockDurationSeconds, TimeUnit.SECONDS);
+    /**
+     * Stop the running simulation.
+     */
+    public boolean stopSimulation() {
+        if (!isSimulationActive()) {
+            return false;
+        }
 
+        if (simulationTask != null) {
+            simulationTask.cancel(false);
+            simulationTask = null;
+        }
+        if (autoStopTask != null) {
+            autoStopTask.cancel(false);
+            autoStopTask = null;
+        }
+
+        redisTemplate.delete(LOCK_KEY);
+        log.info("🛑 === SIMULATION STOPPED ===");
         return true;
     }
 
@@ -89,54 +113,32 @@ public class SimulationService {
     }
 
     /**
-     * Send a burst of normal traffic events.
+     * Generate and send a single normal log event.
      */
-    private void sendNormalTrafficBurst() {
-        log.info("📡 Sending normal traffic burst...");
-        for (int i = 0; i < 150; i++) {
+    private void generateSingleEvent() {
+        try {
             String service = SERVICES.get(random.nextInt(SERVICES.size()));
+            boolean isWarn = random.nextDouble() < 0.05;
+            
+            LogLevel level = isWarn ? LogLevel.WARN : LogLevel.INFO;
+            String message = isWarn 
+                    ? "WARN: Request processed with slight delay or retry - requestId=" + UUID.randomUUID().toString().substring(0, 8)
+                    : "Normal request processed successfully - requestId=" + UUID.randomUUID().toString().substring(0, 8);
+            
             LogEventDTO event = LogEventDTO.builder()
                     .eventId(UUID.randomUUID().toString())
                     .timestamp(LocalDateTime.now())
                     .serviceName(service)
-                    .logLevel(LogLevel.INFO)
-                    .message("Normal request processed successfully - requestId=" + UUID.randomUUID().toString().substring(0, 8))
-                    .latencyMs(50 + random.nextInt(150))
+                    .logLevel(level)
+                    .message(message)
+                    .latencyMs(50 + random.nextInt(150) + (isWarn ? random.nextInt(200) : 0))
                     .statusCode(200)
                     .host(service + "-pod-" + random.nextInt(3))
                     .metadata(Map.of("env", "prod", "simulation", "true"))
                     .build();
             kafkaTemplate.send(TOPIC, service, event);
-
-            try { Thread.sleep(200); } catch (InterruptedException e) { Thread.currentThread().interrupt(); }
+        } catch (Exception e) {
+            log.error("Error generating simulation event", e);
         }
-    }
-
-    /**
-     * Inject a massive ERROR spike — the anomaly that the detector should catch.
-     */
-    private void injectAnomalyBurst() {
-        String targetService = SERVICES.get(random.nextInt(SERVICES.size()));
-        log.warn("🚨 === ANOMALY INJECTION === Targeting: {}", targetService);
-
-        for (int i = 0; i < 50; i++) {
-            LogEventDTO event = LogEventDTO.builder()
-                    .eventId(UUID.randomUUID().toString())
-                    .timestamp(LocalDateTime.now())
-                    .serviceName(targetService)
-                    .logLevel(LogLevel.ERROR)
-                    .message("CRITICAL: Unhandled exception in request processing - cascade failure #" + i)
-                    .stackTrace("java.lang.RuntimeException: Unexpected error\n" +
-                            "\tat com.sentinel.service.RequestHandler.handle(RequestHandler.java:" + (100 + i) + ")")
-                    .requestId(UUID.randomUUID().toString().substring(0, 8))
-                    .latencyMs(5000 + random.nextInt(3000))
-                    .statusCode(500)
-                    .host(targetService + "-pod-" + random.nextInt(3))
-                    .metadata(Map.of("env", "prod", "anomaly", "error_spike", "simulation", "true"))
-                    .build();
-            kafkaTemplate.send(TOPIC, targetService, event);
-        }
-
-        log.warn("🚨 === ANOMALY INJECTION COMPLETE === Sent 50 ERROR events to {}", targetService);
     }
 }

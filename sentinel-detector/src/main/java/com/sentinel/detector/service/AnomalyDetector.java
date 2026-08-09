@@ -50,7 +50,8 @@ public class AnomalyDetector {
     private static final List<String> Z_SCORE_METRICS = List.of(
             "latency_ms",
             "error_5xx_count",
-            "error_count"
+            "error_count",
+            "error_429_count"
     );
 
     /**

@@ -11,9 +11,12 @@ import {
   Clock,
   ShieldAlert,
   Play,
+  Square,
   Search,
   Menu,
-  ChevronLeft
+  ChevronLeft,
+  Sun,
+  Moon
 } from 'lucide-react';
 import { 
   AreaChart, 
@@ -83,6 +86,29 @@ export default function App() {
   const [comments, setComments] = useState([]);
   const [newComment, setNewComment] = useState('');
   const [retrying, setRetrying] = useState(false);
+  const [theme, setTheme] = useState(() => localStorage.getItem('sentinel-theme') || 'light');
+
+  // Chaos panel state
+  const [chaosTarget, setChaosTarget] = useState('payment-service');
+  const [chaosServices, setChaosServices] = useState(['payment-service', 'order-service', 'inventory-service', 'notification-service', 'user-service']);
+  const [chaosScenarios, setChaosScenarios] = useState([]);
+  const [injecting, setInjecting] = useState(null);
+
+  // Settings state
+  const [apiKeyInput, setApiKeyInput] = useState('');
+  const [apiKeyMasked, setApiKeyMasked] = useState('');
+  const [llmTestResult, setLlmTestResult] = useState(null);
+  const [logsPerSecond, setLogsPerSecond] = useState(5);
+  const [resetting, setResetting] = useState(false);
+  const [showResetConfirm, setShowResetConfirm] = useState(false);
+
+  // Dark/Light mode persistence
+  useEffect(() => {
+    document.documentElement.setAttribute('data-theme', theme);
+    localStorage.setItem('sentinel-theme', theme);
+  }, [theme]);
+
+  const toggleTheme = () => setTheme(prev => prev === 'light' ? 'dark' : 'light');
 
   const addToast = useCallback((message, type = 'info') => {
     const id = Date.now();
@@ -139,6 +165,100 @@ export default function App() {
     } catch (err) {
       addToast(err.message, 'error');
     }
+  };
+
+  const handleStopSimulation = async () => {
+    try {
+      const res = await api.stopSimulation();
+      addToast(res.message || 'Simulation stopped', 'info');
+      setSimRunning(false);
+      setTimeout(loadData, 1000);
+    } catch (err) {
+      addToast(err.message, 'error');
+    }
+  };
+
+  const handleInjectAnomaly = async (scenarioId) => {
+    if (!simRunning) {
+      addToast('Start the simulation engine first!', 'warning');
+      return;
+    }
+    try {
+      setInjecting(scenarioId);
+      const res = await api.injectAnomaly(scenarioId, chaosTarget);
+      addToast(res.message || `🚨 Injected ${scenarioId} on ${chaosTarget}`, 'success');
+      setTimeout(loadData, 3000);
+    } catch (err) {
+      addToast(err.message, 'error');
+    } finally {
+      setInjecting(null);
+    }
+  };
+
+  // Load chaos scenarios on mount
+  useEffect(() => {
+    const loadChaos = async () => {
+      try {
+        const [scenarios, services] = await Promise.all([
+          api.getChaosScenarios(),
+          api.getChaosServices(),
+        ]);
+        if (scenarios?.length) setChaosScenarios(scenarios);
+        if (services?.length) setChaosServices(services);
+      } catch { /* use defaults */ }
+    };
+    loadChaos();
+  }, []);
+
+  // Load settings on mount
+  useEffect(() => {
+    const loadSettings = async () => {
+      try {
+        const [keyData, simConfig] = await Promise.all([
+          api.getApiKey(),
+          api.getSimConfig(),
+        ]);
+        if (keyData?.maskedKey) setApiKeyMasked(keyData.maskedKey);
+        if (simConfig?.logsPerSecond) setLogsPerSecond(simConfig.logsPerSecond);
+      } catch { /* use defaults */ }
+    };
+    loadSettings();
+  }, []);
+
+  const handleSaveApiKey = async () => {
+    if (!apiKeyInput.trim()) return;
+    try {
+      const res = await api.updateApiKey(apiKeyInput.trim());
+      setApiKeyMasked(res.maskedKey || '••••••••');
+      setApiKeyInput('');
+      addToast('API key saved securely', 'success');
+    } catch (err) { addToast(err.message, 'error'); }
+  };
+
+  const handleTestLLM = async () => {
+    try {
+      setLlmTestResult(null);
+      const res = await api.testLLM();
+      setLlmTestResult(res);
+    } catch (err) { setLlmTestResult({ success: false, message: err.message }); }
+  };
+
+  const handleFactoryReset = async () => {
+    try {
+      setResetting(true);
+      await api.factoryReset();
+      addToast('🗑️ All data cleared successfully!', 'success');
+      setShowResetConfirm(false);
+      loadData();
+    } catch (err) { addToast(err.message, 'error'); }
+    finally { setResetting(false); }
+  };
+
+  const handleUpdateLogsPerSecond = async (val) => {
+    setLogsPerSecond(val);
+    try {
+      await api.updateSimConfig({ logsPerSecond: val });
+    } catch { /* silent */ }
   };
 
   const handleResolve = async (id) => {
@@ -296,6 +416,46 @@ export default function App() {
           <div className="metric-card__value">{stats?.totalLogEvents?.toLocaleString() ?? '—'}</div>
           <div className="metric-card__sub">Processed in last 24h</div>
         </div>
+      </div>
+
+      {/* ─── Chaos Engineering Panel ───────────────────────────────── */}
+      <div className="chaos-panel">
+        <div className="chaos-panel__header">
+          <span className="chaos-panel__title">🔥 Chaos Engineering Lab</span>
+          <div className="chaos-panel__controls">
+            <label style={{fontSize: '0.78rem', color: 'var(--text-secondary)', fontWeight: 600}}>Target:</label>
+            <select className="chaos-panel__service-select" value={chaosTarget} onChange={e => setChaosTarget(e.target.value)}>
+              {chaosServices.map(s => <option key={s} value={s}>{s}</option>)}
+            </select>
+          </div>
+        </div>
+        {simRunning ? (
+          <div className="chaos-grid">
+            {(chaosScenarios.length > 0 ? chaosScenarios : [
+              { id: 'ERROR_SPIKE', label: 'Error Spike', icon: '⚡' },
+              { id: 'LATENCY_SURGE', label: 'Latency Surge', icon: '🐢' },
+              { id: 'DB_OUTAGE', label: 'DB Outage', icon: '💥' },
+              { id: 'MEMORY_LEAK', label: 'Memory Leak', icon: '💧' },
+              { id: 'DOWNSTREAM_FAILURE', label: 'Downstream Timeout', icon: '🔗' },
+              { id: 'RATE_LIMIT_SPIKE', label: 'Rate Limit', icon: '🛑' },
+              { id: 'CONFIG_ERROR', label: 'Bad Config', icon: '📝' },
+            ]).map(s => (
+              <button
+                key={s.id}
+                className="chaos-btn"
+                onClick={() => handleInjectAnomaly(s.id)}
+                disabled={injecting === s.id}
+              >
+                <span className="chaos-btn__icon">{s.icon}</span>
+                {injecting === s.id ? 'Injecting...' : s.label}
+              </button>
+            ))}
+          </div>
+        ) : (
+          <div className="chaos-panel__disabled-msg">
+            ⚠️ Start the simulation engine to unlock anomaly injection
+          </div>
+        )}
       </div>
 
       <div className="dashboard-grid">
@@ -763,6 +923,114 @@ export default function App() {
     </div>
   );
 
+  // ─── Settings View ──────────────────────────────────────────────────────
+  const renderSettingsView = () => (
+    <div className="settings-view">
+      {/* Section 1: AI & API Configuration */}
+      <div className="settings-card">
+        <div className="settings-card__header">
+          <Activity size={16} />
+          <span className="settings-card__title">AI & API Configuration</span>
+        </div>
+        <div className="settings-card__body">
+          <div className="settings-field">
+            <span className="settings-field__label">OpenRouter API Key</span>
+            {apiKeyMasked && (
+              <span className="settings-badge success" style={{alignSelf: 'flex-start', marginBottom: '4px'}}>
+                🔒 Current: {apiKeyMasked}
+              </span>
+            )}
+            <div className="settings-field__row">
+              <input
+                type="password"
+                className="settings-input"
+                placeholder="sk-or-v1-..."
+                value={apiKeyInput}
+                onChange={e => setApiKeyInput(e.target.value)}
+              />
+              <button className="btn btn-primary" onClick={handleSaveApiKey} disabled={!apiKeyInput.trim()} style={{whiteSpace: 'nowrap'}}>
+                Save Key
+              </button>
+              <button className="btn" onClick={handleTestLLM} style={{whiteSpace: 'nowrap'}}>
+                Test Connection
+              </button>
+            </div>
+            <span className="settings-field__hint">
+              Your API key is encrypted with AES-256-GCM before being stored. It is never exposed in API responses.
+            </span>
+            {llmTestResult && (
+              <span className={`settings-badge ${llmTestResult.success ? 'success' : 'error'}`} style={{alignSelf: 'flex-start', marginTop: '4px'}}>
+                {llmTestResult.success ? '✅' : '❌'} {llmTestResult.message}
+              </span>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* Section 2: Simulation Configuration */}
+      <div className="settings-card">
+        <div className="settings-card__header">
+          <Server size={16} />
+          <span className="settings-card__title">Simulation Configuration</span>
+        </div>
+        <div className="settings-card__body">
+          <div className="settings-field">
+            <span className="settings-field__label">Log Ingestion Rate</span>
+            <div className="settings-slider-container">
+              <span style={{fontSize: '0.75rem', color: 'var(--text-muted)'}}>1/s</span>
+              <input
+                type="range"
+                className="settings-slider"
+                min="1"
+                max="20"
+                value={logsPerSecond}
+                onChange={e => handleUpdateLogsPerSecond(parseInt(e.target.value))}
+              />
+              <span style={{fontSize: '0.75rem', color: 'var(--text-muted)'}}>20/s</span>
+              <span className="settings-slider__value">{logsPerSecond} logs/s</span>
+            </div>
+            <span className="settings-field__hint">
+              Controls how many log events per second the simulator generates. Higher values create more realistic traffic but consume more resources.
+            </span>
+          </div>
+        </div>
+      </div>
+
+      {/* Section 3: Danger Zone */}
+      <div className="settings-card danger-zone">
+        <div className="settings-card__header">
+          <XCircle size={16} color="var(--severity-p0)" />
+          <span className="settings-card__title">Danger Zone</span>
+        </div>
+        <div className="settings-card__body">
+          <div className="settings-field">
+            <span className="settings-field__label">Factory Reset</span>
+            <span className="settings-field__hint" style={{marginBottom: '8px'}}>
+              This will permanently delete ALL incidents, logs, anomalies, and cached data. Kafka offsets will not be reset. This action cannot be undone.
+            </span>
+            {!showResetConfirm ? (
+              <button className="btn-danger" onClick={() => setShowResetConfirm(true)} style={{alignSelf: 'flex-start'}}>
+                🗑️ Reset All Data
+              </button>
+            ) : (
+              <div className="settings-field__row">
+                <span style={{fontSize: '0.82rem', fontWeight: 600, color: 'var(--severity-p0)'}}>
+                  Are you sure? This cannot be undone.
+                </span>
+                <button className="btn-danger" onClick={handleFactoryReset} disabled={resetting} style={{whiteSpace: 'nowrap'}}>
+                  {resetting ? 'Resetting...' : 'Yes, Delete Everything'}
+                </button>
+                <button className="btn" onClick={() => setShowResetConfirm(false)} style={{whiteSpace: 'nowrap'}}>
+                  Cancel
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+
   // ─── Main Render ──────────────────────────────────────────────────────
   return (
     <div className="app-layout">
@@ -802,24 +1070,32 @@ export default function App() {
           >
             <AlertCircle className="icon" /> Incidents
           </div>
-          <div className="nav-item">
+          <div 
+            className={`nav-item ${currentView === 'settings' ? 'active' : ''}`}
+            onClick={() => setCurrentView('settings')}
+          >
             <Settings className="icon" /> Settings
           </div>
         </nav>
 
         <div className="sidebar__footer">
-          <button
-            className={`btn-simulate ${simRunning ? 'running' : ''}`}
-            onClick={handleSimulate}
-            disabled={simRunning}
-            id="simulate-btn"
-          >
-            {simRunning ? (
-              <><span className="spinner" style={{width: '14px', height: '14px', borderTopColor: 'white'}} /> Simulating...</>
-            ) : (
-              <><Play size={16} fill="currentColor" /> Trigger Simulation</>
-            )}
-          </button>
+          {simRunning ? (
+            <button
+              className="btn-simulate running"
+              onClick={handleStopSimulation}
+              id="simulate-btn"
+            >
+              <Square size={16} fill="currentColor" /> Stop Simulation
+            </button>
+          ) : (
+            <button
+              className="btn-simulate"
+              onClick={handleSimulate}
+              id="simulate-btn"
+            >
+              <Play size={16} fill="currentColor" /> Start Simulation
+            </button>
+          )}
         </div>
       </aside>
 
@@ -829,28 +1105,19 @@ export default function App() {
         {/* Top Header */}
         <header className="top-header">
           <h1 className="top-header__title">
-            {currentView === 'dashboard' ? 'Global Overview' : 'Incident Management'}
+            {currentView === 'dashboard' ? 'Global Overview' : currentView === 'settings' ? 'Settings' : 'Incident Management'}
           </h1>
           
-          <div className="health-status">
-            <span className="health-indicator">
-              <span className={`health-dot ${health?.postgres?.status === 'UP' ? 'up' : 'down'}`} />
-              DB
-            </span>
-            <span className="health-indicator">
-              <span className={`health-dot ${health?.redis?.status === 'UP' ? 'up' : 'down'}`} />
-              Cache
-            </span>
-            <span className="health-indicator" style={{background: health?.overall === 'GREEN' ? 'var(--severity-p3-bg)' : 'var(--bg-primary)'}}>
-              <span className={`health-dot ${health?.overall === 'GREEN' ? 'up' : health?.overall === 'YELLOW' ? 'up' : 'unknown'}`} />
-              System: {health?.overall || '...'}
-            </span>
-          </div>
+          <button className="theme-toggle" onClick={toggleTheme} title={theme === 'light' ? 'Switch to Dark Mode' : 'Switch to Light Mode'}>
+            {theme === 'light' ? <Moon size={18} /> : <Sun size={18} />}
+          </button>
         </header>
 
         {/* Scrollable Content Area */}
         <div className="content-area">
-          {currentView === 'dashboard' ? renderDashboardView() : renderIncidentsView()}
+          {currentView === 'dashboard' && renderDashboardView()}
+          {currentView === 'incidents' && renderIncidentsView()}
+          {currentView === 'settings' && renderSettingsView()}
         </div>
       </main>
 

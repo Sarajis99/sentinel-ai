@@ -47,6 +47,29 @@ export const api = {
 
   // System
   triggerSimulation: () => fetchJSON('/system/simulate', { method: 'POST' }),
+  stopSimulation: () => fetchJSON('/system/simulate/stop', { method: 'POST' }),
   getSimulationStatus: () => fetchJSON('/system/simulation-status'),
   getHealth: () => fetchJSON('/health'),
+
+  // Chaos Engineering
+  injectAnomaly: (scenario, targetService) => fetchJSON('/chaos/inject', {
+    method: 'POST',
+    body: JSON.stringify({ scenario, targetService }),
+  }),
+  getChaosScenarios: () => fetchJSON('/chaos/scenarios'),
+  getChaosServices: () => fetchJSON('/chaos/services'),
+
+  // Settings
+  updateApiKey: (apiKey) => fetchJSON('/settings/api-key', {
+    method: 'PUT',
+    body: JSON.stringify({ apiKey }),
+  }),
+  getApiKey: () => fetchJSON('/settings/api-key'),
+  testLLM: () => fetchJSON('/settings/test-llm'),
+  factoryReset: () => fetchJSON('/system/factory-reset', { method: 'POST' }),
+  getSimConfig: () => fetchJSON('/settings/simulation'),
+  updateSimConfig: (config) => fetchJSON('/settings/simulation', {
+    method: 'PUT',
+    body: JSON.stringify(config),
+  }),
 };

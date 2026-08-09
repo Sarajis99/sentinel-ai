@@ -10,8 +10,15 @@ import org.springframework.http.*;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.HttpClientErrorException;
 import org.springframework.web.client.RestTemplate;
+import org.springframework.data.redis.core.StringRedisTemplate;
 
+import javax.crypto.Cipher;
+import javax.crypto.spec.GCMParameterSpec;
+import javax.crypto.spec.SecretKeySpec;
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
 import java.util.ArrayList;
+import java.util.Base64;
 import java.util.List;
 import java.util.Map;
 
@@ -35,8 +42,13 @@ public class OpenRouterClient implements LLMClient {
     private final ObjectMapper objectMapper;
     private final List<String> freeFallbackModels = new ArrayList<>();
 
+    private final StringRedisTemplate redisTemplate;
+
     @Value("${llm.openrouter.api-key}")
-    private String apiKey;
+    private String defaultApiKey;
+
+    @Value("${SETTINGS_ENCRYPTION_KEY:sentinel-ai-default-encryption-key-32b}")
+    private String encryptionKeyStr;
 
     @Value("${llm.openrouter.base-url}")
     private String baseUrl;
@@ -50,9 +62,10 @@ public class OpenRouterClient implements LLMClient {
     @Value("${llm.openrouter.app-name}")
     private String appName;
 
-    public OpenRouterClient(ObjectMapper objectMapper) {
+    public OpenRouterClient(ObjectMapper objectMapper, StringRedisTemplate redisTemplate) {
         this.restTemplate = new RestTemplate();
         this.objectMapper = objectMapper;
+        this.redisTemplate = redisTemplate;
     }
 
     @PostConstruct
@@ -151,7 +164,8 @@ public class OpenRouterClient implements LLMClient {
 
     @Override
     public boolean isAvailable() {
-        return apiKey != null && !apiKey.isBlank() && !apiKey.equals("your-openrouter-key-here");
+        String key = getEffectiveApiKey();
+        return key != null && !key.isBlank() && !key.equals("your-openrouter-key-here");
     }
 
     // ─── Helpers ─────────────────────────────────────────────────────────────
@@ -159,7 +173,7 @@ public class OpenRouterClient implements LLMClient {
     private HttpHeaders buildHeaders() {
         HttpHeaders headers = new HttpHeaders();
         headers.setContentType(MediaType.APPLICATION_JSON);
-        headers.set("Authorization", "Bearer " + apiKey);
+        headers.set("Authorization", "Bearer " + getEffectiveApiKey());
         headers.set("HTTP-Referer", siteUrl);
         headers.set("X-Title", appName);
         return headers;
@@ -247,5 +261,33 @@ public class OpenRouterClient implements LLMClient {
                 .confidence(0.0)
                 .parseSuccess(false)
                 .build();
+    }
+
+    private String getEffectiveApiKey() {
+        try {
+            String encodedKey = redisTemplate.opsForValue().get("settings:openrouter-api-key");
+            if (encodedKey != null && !encodedKey.isBlank()) {
+                byte[] encryptedData = Base64.getDecoder().decode(encodedKey);
+                byte[] iv = new byte[12];
+                System.arraycopy(encryptedData, 0, iv, 0, iv.length);
+
+                byte[] ciphertext = new byte[encryptedData.length - iv.length];
+                System.arraycopy(encryptedData, iv.length, ciphertext, 0, ciphertext.length);
+
+                MessageDigest digest = MessageDigest.getInstance("SHA-256");
+                byte[] keyBytes = digest.digest(encryptionKeyStr.getBytes(StandardCharsets.UTF_8));
+                SecretKeySpec secretKey = new SecretKeySpec(keyBytes, "AES");
+
+                Cipher cipher = Cipher.getInstance("AES/GCM/NoPadding");
+                GCMParameterSpec gcmParameterSpec = new GCMParameterSpec(128, iv);
+                cipher.init(Cipher.DECRYPT_MODE, secretKey, gcmParameterSpec);
+
+                byte[] plainText = cipher.doFinal(ciphertext);
+                return new String(plainText, StandardCharsets.UTF_8);
+            }
+        } catch (Exception e) {
+            log.error("Failed to decrypt API key from Redis, falling back to default.", e);
+        }
+        return defaultApiKey;
     }
 }

@@ -56,6 +56,11 @@ public class RealTimeMetricsService {
             incrementCounter(service, "error_5xx_count", now);
         }
 
+        // Track 429 Rate Limit status codes
+        if (event.getStatusCode() != null && event.getStatusCode() == 429) {
+            incrementCounter(service, "error_429_count", now);
+        }
+
         // 5. Update health summary hash
         updateHealthSummary(service);
 
@@ -112,7 +117,7 @@ public class RealTimeMetricsService {
      */
     private void pruneOldData(String service, long nowMs) {
         long cutoff = nowMs - (WINDOW_MINUTES * 60 * 1000L);
-        String[] metrics = {"request_count", "error_count", "latency_ms", "error_5xx_count"};
+        String[] metrics = {"request_count", "error_count", "latency_ms", "error_5xx_count", "error_429_count"};
 
         for (String metric : metrics) {
             String key = METRICS_PREFIX + service + ":" + metric;
