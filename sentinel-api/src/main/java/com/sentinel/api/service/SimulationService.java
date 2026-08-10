@@ -121,12 +121,45 @@ public class SimulationService {
     private void generateSingleEvent() {
         try {
             String service = SERVICES.get(random.nextInt(SERVICES.size()));
+            
+            // 1. Organic Anomaly (Micro-burst) - 0.01% chance
+            boolean isAnomaly = random.nextDouble() < 0.0001;
+            
+            // 2. Breathing Latency (Sine Wave)
+            double timeMinutes = System.currentTimeMillis() / 60000.0;
+            double offset = Math.abs(service.hashCode()) % 10;
+            double wave = Math.sin((timeMinutes / 2.0) + offset);
+            double multiplier = 1.0 + (wave * 0.8); // 0.2 to 1.8
+            
             boolean isWarn = random.nextDouble() < 0.05;
             
             LogLevel level = isWarn ? LogLevel.WARN : LogLevel.INFO;
             String message = isWarn 
                     ? "WARN: Request processed with slight delay or retry - requestId=" + UUID.randomUUID().toString().substring(0, 8)
                     : "Normal request processed successfully - requestId=" + UUID.randomUUID().toString().substring(0, 8);
+                    
+            int latencyMs = (int) ((30 + random.nextInt(60)) * multiplier) + (isWarn ? random.nextInt(50) : 0);
+            
+            // Override if it's an organic anomaly
+            if (isAnomaly) {
+                // To actually shift the P99 latency on the dashboard and make the node turn Red/Yellow,
+                // we must send a micro-burst of errors (since a single log won't affect the 99th percentile of 600 logs)
+                for (int i = 0; i < 15; i++) {
+                    LogEventDTO anomalyEvent = LogEventDTO.builder()
+                            .eventId(UUID.randomUUID().toString())
+                            .timestamp(LocalDateTime.now())
+                            .serviceName(service)
+                            .logLevel(LogLevel.ERROR)
+                            .message("ERROR: Intermittent network timeout - organic anomaly - requestId=" + UUID.randomUUID().toString().substring(0, 8))
+                            .latencyMs(800 + random.nextInt(500))
+                            .statusCode(500)
+                            .host(service + "-pod-" + random.nextInt(3))
+                            .metadata(Map.of("env", "prod", "simulation", "true"))
+                            .build();
+                    kafkaTemplate.send(TOPIC, service, anomalyEvent);
+                }
+                return; // Skip sending the normal event this cycle
+            }
             
             LogEventDTO event = LogEventDTO.builder()
                     .eventId(UUID.randomUUID().toString())
@@ -134,7 +167,7 @@ public class SimulationService {
                     .serviceName(service)
                     .logLevel(level)
                     .message(message)
-                    .latencyMs(50 + random.nextInt(150) + (isWarn ? random.nextInt(200) : 0))
+                    .latencyMs(latencyMs)
                     .statusCode(200)
                     .host(service + "-pod-" + random.nextInt(3))
                     .metadata(Map.of("env", "prod", "simulation", "true"))
