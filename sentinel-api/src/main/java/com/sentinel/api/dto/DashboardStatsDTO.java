@@ -32,4 +32,6 @@ public class DashboardStatsDTO {
     private Double averageMttrSeconds;
 
     private boolean simulationActive;  // Is a simulation currently running?
+    
+    private java.util.List<java.util.Map<String, Object>> dailyTrend;
 }

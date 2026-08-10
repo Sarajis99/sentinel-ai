@@ -16,7 +16,8 @@ import {
   Menu,
   ChevronLeft,
   Sun,
-  Moon
+  Moon,
+  Edit3
 } from 'lucide-react';
 import { 
   AreaChart, 
@@ -141,19 +142,46 @@ export default function App() {
     return () => clearInterval(interval);
   }, [loadData]);
 
-  // Generate mock trend data based on current total anomalies to make graph look alive
   const trendData = useMemo(() => {
-    const base = (stats?.totalAnomalies || 20) / 7;
-    return [
-      { time: '6 days ago', events: Math.round(base * 0.8) },
-      { time: '5 days ago', events: Math.round(base * 1.2) },
-      { time: '4 days ago', events: Math.round(base * 0.9) },
-      { time: '3 days ago', events: Math.round(base * 1.5) },
-      { time: '2 days ago', events: Math.round(base * 1.1) },
-      { time: 'Yesterday', events: Math.round(base * 0.7) },
-      { time: 'Today', events: Math.round(base * 1.8) },
-    ];
-  }, [stats?.totalAnomalies]);
+    let raw = stats?.dailyTrend || [];
+    const result = [];
+    const today = new Date();
+    
+    // Create an array of the last 7 days (including today)
+    for (let i = 6; i >= 0; i--) {
+      const d = new Date(today);
+      d.setDate(d.getDate() - i);
+      const dateStr = d.toLocaleDateString('en-US', { month: 'short', day: '2-digit' });
+      
+      // Look for this date in the raw data
+      const existing = raw.find(item => item.date === dateStr);
+      result.push({
+        date: dateStr,
+        incidents: existing ? Number(existing.incidents) : 0
+      });
+    }
+    
+    return result;
+  }, [stats?.dailyTrend]);
+
+  // ─── Manual Disposition ────────────────────────────────────────────────
+  const handleOpenNewModal = () => {
+    setModalForm({ rootCause: '', rcaSummary: '', impactAnalysis: '', suggestedFix: '', prevention: '' });
+    setShowModal(true);
+  };
+
+  const handleOpenEditModal = () => {
+    if (selected) {
+      setModalForm({
+        rootCause: selected.rootCause || '',
+        rcaSummary: selected.rcaSummary || '',
+        impactAnalysis: selected.impactAnalysis || '',
+        suggestedFix: selected.suggestedFix || '',
+        prevention: selected.prevention || ''
+      });
+      setShowModal(true);
+    }
+  };
 
   // ─── Action Handlers ──────────────────────────────────────────────────
   const handleSimulate = async () => {
@@ -235,6 +263,17 @@ export default function App() {
     } catch (err) { addToast(err.message, 'error'); }
   };
 
+  const handleClearApiKey = async () => {
+    try {
+      await api.updateApiKey("");
+      setApiKeyMasked("");
+      setApiKeyInput("");
+      addToast("API key cleared", "success");
+    } catch (err) {
+      addToast(err.message, "error");
+    }
+  };
+
   const handleTestLLM = async () => {
     try {
       setLlmTestResult(null);
@@ -281,6 +320,10 @@ export default function App() {
 
   const handleManualDisposition = async () => {
     if (!selected) return;
+    if (!modalForm.rootCause || !modalForm.rcaSummary || !modalForm.impactAnalysis || !modalForm.suggestedFix || !modalForm.prevention) {
+      addToast('Please fill all mandatory fields to submit the manual triage report.', 'error');
+      return;
+    }
     try {
       const updated = await api.manualDisposition(selected.incidentId, modalForm);
       addToast('Manual disposition applied successfully', 'success');
@@ -473,14 +516,14 @@ export default function App() {
                     <stop offset="95%" stopColor="var(--accent-primary)" stopOpacity={0}/>
                   </linearGradient>
                 </defs>
-                <XAxis dataKey="time" stroke="var(--text-muted)" fontSize={12} tickLine={false} axisLine={false} />
+                <XAxis dataKey="date" stroke="var(--text-muted)" fontSize={12} tickLine={false} axisLine={false} />
                 <YAxis stroke="var(--text-muted)" fontSize={12} tickLine={false} axisLine={false} />
                 <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="var(--border-subtle)" />
                 <Tooltip 
                   contentStyle={{ backgroundColor: 'var(--bg-card)', border: '1px solid var(--border-medium)', borderRadius: '4px' }}
                   itemStyle={{ color: 'var(--text-primary)', fontWeight: 600 }}
                 />
-                <Area type="monotone" dataKey="events" stroke="var(--accent-primary)" strokeWidth={2} fillOpacity={1} fill="url(#colorEvents)" />
+                <Area type="monotone" dataKey="incidents" stroke="var(--accent-primary)" strokeWidth={2} fillOpacity={1} fill="url(#colorEvents)" />
               </AreaChart>
             </ResponsiveContainer>
           </div>
@@ -493,30 +536,19 @@ export default function App() {
           </div>
           <div className="panel-content">
             <div className="health-grid">
-              <div className="health-item">
-                <span className="health-item__name"><Database size={14} /> PostgreSQL (pgvector)</span>
-                <span className={`health-indicator ${health?.postgres?.status === 'UP' ? 'up' : 'down'}`}>
-                  {health?.postgres?.status || 'UNKNOWN'}
-                </span>
-              </div>
-              <div className="health-item">
-                <span className="health-item__name"><Database size={14} /> Redis Cluster</span>
-                <span className={`health-indicator ${health?.redis?.status === 'UP' ? 'up' : 'down'}`}>
-                  {health?.redis?.status || 'UNKNOWN'}
-                </span>
-              </div>
-              <div className="health-item">
-                <span className="health-item__name"><Server size={14} /> Payment Service</span>
-                <span className="health-indicator up">UP</span>
-              </div>
-              <div className="health-item">
-                <span className="health-item__name"><Server size={14} /> Order Service</span>
-                <span className="health-indicator up">UP</span>
-              </div>
-              <div className="health-item">
-                <span className="health-item__name"><Server size={14} /> Inventory Service</span>
-                <span className="health-indicator up">UP</span>
-              </div>
+              {['payment-service', 'order-service', 'inventory-service', 'notification-service', 'user-service'].map(svc => {
+                const sHealth = health?.services?.[svc];
+                const status = sHealth?.status || 'UNKNOWN';
+                return (
+                  <div className="health-item" key={svc}>
+                    <span className="health-item__name"><Server size={14} /> {svc.split('-').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ')}</span>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                      {sHealth && <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>{Math.round(sHealth.errorRate * 100)}% err | p99: {Math.round(sHealth.p99Latency || 0)}ms</span>}
+                      <span className={`health-indicator ${status.toLowerCase()}`}>{status}</span>
+                    </div>
+                  </div>
+                );
+              })}
             </div>
           </div>
         </div>
@@ -616,7 +648,7 @@ export default function App() {
                     <button className="btn btn-primary" onClick={() => handleRetryAnalysis(selected.incidentId)} disabled={retrying}>
                       {retrying ? <><span className="spinner" style={{width: '14px', height: '14px'}} /> Retrying...</> : '🔄 Retry AI Analysis'}
                     </button>
-                    <button className="btn btn-warning" onClick={() => setShowModal(true)}>
+                    <button className="btn btn-warning" onClick={handleOpenNewModal}>
                       <ShieldAlert size={14} /> Manual Triage
                     </button>
                     <button className="btn" onClick={() => handleDismiss(selected.incidentId)}>
@@ -649,6 +681,11 @@ export default function App() {
                     🔒 Close Incident
                   </button>
                 )}
+                {selected.confidence == null && selected.status !== 'CLOSED' && selected.status !== 'AWAITING_TRIAGE' && (
+                  <button className="btn btn-warning" onClick={handleOpenEditModal}>
+                    <Edit3 size={14} /> Edit Triage
+                  </button>
+                )}
               </div>
             </div>
 
@@ -658,7 +695,7 @@ export default function App() {
                 Incident Details
               </button>
               <button className={`tab ${activeTab === 'analysis' ? 'active' : ''}`} onClick={() => setActiveTab('analysis')}>
-                AI Analysis
+                {selected.confidence == null && ['RCA_COMPLETE', 'IN_PROGRESS', 'RESOLVED', 'CLOSED'].includes(selected.status) ? '🧠 Manual Analysis' : '✨ AI Analysis'}
               </button>
               <button className={`tab ${activeTab === 'raw' ? 'active' : ''}`} onClick={() => setActiveTab('raw')}>
                 Raw Logs
@@ -766,7 +803,7 @@ export default function App() {
                         </div>
                         <div className="sn-form-group">
                           <label className="sn-label">Impact</label>
-                          <select className="sn-input" defaultValue={selected.severity === 'P1' ? '1 - High' : selected.severity === 'P2' ? '2 - Medium' : '3 - Low'}>
+                          <select className="sn-input" defaultValue={['P0', 'P1'].includes(selected.severity) ? '1 - High' : selected.severity === 'P2' ? '2 - Medium' : '3 - Low'}>
                             <option>1 - High</option>
                             <option>2 - Medium</option>
                             <option>3 - Low</option>
@@ -774,7 +811,7 @@ export default function App() {
                         </div>
                         <div className="sn-form-group">
                           <label className="sn-label">Urgency</label>
-                          <select className="sn-input" defaultValue={selected.severity === 'P1' ? '1 - High' : selected.severity === 'P2' ? '2 - Medium' : '3 - Low'}>
+                          <select className="sn-input" defaultValue={['P0', 'P1'].includes(selected.severity) ? '1 - High' : selected.severity === 'P2' ? '2 - Medium' : '3 - Low'}>
                             <option>1 - High</option>
                             <option>2 - Medium</option>
                             <option>3 - Low</option>
@@ -782,7 +819,7 @@ export default function App() {
                         </div>
                         <div className="sn-form-group">
                           <label className="sn-label">Priority</label>
-                          <input type="text" className="sn-input sn-readonly" value={selected.severity === 'P1' ? '1 - Critical' : selected.severity === 'P2' ? '2 - High' : '3 - Moderate'} readOnly />
+                          <input type="text" className="sn-input sn-readonly" value={selected.severity === 'P0' ? '1 - Critical' : selected.severity === 'P1' ? '2 - High' : selected.severity === 'P2' ? '3 - Moderate' : '4 - Low'} readOnly />
                         </div>
                         <div className="sn-form-group">
                           <label className="sn-label">Assignment group</label>
@@ -879,18 +916,20 @@ export default function App() {
                       <div className="rca-section__label">Prevention</div>
                       <div className="rca-section__text">{selected.prevention || 'No prevention steps'}</div>
                     </div>
-                    <div>
-                      <div className="rca-section__label">AI Confidence</div>
-                      <div className="confidence-bar">
-                        <div
-                          className={`confidence-bar__fill ${(selected.confidence ?? 0) >= 0.7 ? 'confidence-high' : (selected.confidence ?? 0) >= 0.4 ? 'confidence-medium' : 'confidence-low'}`}
-                          style={{ width: `${(selected.confidence ?? 0) * 100}%` }}
-                        />
+                    {selected.confidence != null && (
+                      <div>
+                        <div className="rca-section__label">AI Confidence</div>
+                        <div className="confidence-bar">
+                          <div
+                            className={`confidence-bar__fill ${(selected.confidence ?? 0) >= 0.7 ? 'confidence-high' : (selected.confidence ?? 0) >= 0.4 ? 'confidence-medium' : 'confidence-low'}`}
+                            style={{ width: `${(selected.confidence ?? 0) * 100}%` }}
+                          />
+                        </div>
+                        <div style={{fontSize: '0.7rem', color: 'var(--text-muted)', marginTop: '4px', fontWeight: 600}}>
+                          {((selected.confidence ?? 0) * 100).toFixed(0)}% CONFIDENCE
+                        </div>
                       </div>
-                      <div style={{fontSize: '0.7rem', color: 'var(--text-muted)', marginTop: '4px', fontWeight: 600}}>
-                        {((selected.confidence ?? 0) * 100).toFixed(0)}% CONFIDENCE
-                      </div>
-                    </div>
+                    )}
                   </div>
               )}
 
@@ -950,6 +989,9 @@ export default function App() {
               />
               <button className="btn btn-primary" onClick={handleSaveApiKey} disabled={!apiKeyInput.trim()} style={{whiteSpace: 'nowrap'}}>
                 Save Key
+              </button>
+              <button className="btn btn-danger" onClick={handleClearApiKey} disabled={!apiKeyMasked} style={{whiteSpace: 'nowrap'}}>
+                Clear Key
               </button>
               <button className="btn" onClick={handleTestLLM} style={{whiteSpace: 'nowrap'}}>
                 Test Connection
@@ -1128,27 +1170,27 @@ export default function App() {
             <h3 className="modal__title">Manual Triage Report</h3>
 
             <div className="modal__field">
-              <label className="modal__label">Root Cause</label>
+              <label className="modal__label">Root Cause <span style={{color: '#ef4444'}}>*</span></label>
               <input className="modal__input" placeholder="e.g., DB_OUTAGE"
                 value={modalForm.rootCause} onChange={e => setModalForm(p => ({...p, rootCause: e.target.value}))} />
             </div>
             <div className="modal__field">
-              <label className="modal__label">RCA Summary</label>
+              <label className="modal__label">RCA Summary <span style={{color: '#ef4444'}}>*</span></label>
               <textarea className="modal__textarea" placeholder="Brief summary of what happened..."
                 value={modalForm.rcaSummary} onChange={e => setModalForm(p => ({...p, rcaSummary: e.target.value}))} />
             </div>
             <div className="modal__field">
-              <label className="modal__label">Impact Analysis</label>
+              <label className="modal__label">Impact Analysis <span style={{color: '#ef4444'}}>*</span></label>
               <textarea className="modal__textarea" placeholder="Affected systems..."
                 value={modalForm.impactAnalysis} onChange={e => setModalForm(p => ({...p, impactAnalysis: e.target.value}))} />
             </div>
             <div className="modal__field">
-              <label className="modal__label">Suggested Fix</label>
+              <label className="modal__label">Suggested Fix <span style={{color: '#ef4444'}}>*</span></label>
               <textarea className="modal__textarea" placeholder="Steps to mitigate..."
                 value={modalForm.suggestedFix} onChange={e => setModalForm(p => ({...p, suggestedFix: e.target.value}))} />
             </div>
             <div className="modal__field">
-              <label className="modal__label">Prevention</label>
+              <label className="modal__label">Prevention <span style={{color: '#ef4444'}}>*</span></label>
               <textarea className="modal__textarea" placeholder="Future prevention..."
                 value={modalForm.prevention} onChange={e => setModalForm(p => ({...p, prevention: e.target.value}))} />
             </div>

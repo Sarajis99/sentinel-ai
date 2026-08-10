@@ -134,9 +134,15 @@ public class IncidentService {
         incident.setImpactAnalysis(request.getImpactAnalysis());
         incident.setSuggestedFix(request.getSuggestedFix());
         incident.setPrevention(request.getPrevention());
-        incident.setConfidence(1.0); // Manual = 100% confidence
+        incident.setConfidence(null); // Manual triage has no AI confidence
         incident.setAnalyzedAt(LocalDateTime.now());
-        incident.setStatus("RCA_COMPLETE"); // Now it has a real RCA, back to RCA_COMPLETE for resolution
+        
+        // Only progress to RCA_COMPLETE if we are in an early stage.
+        // If the analyst is editing an existing manual triage, leave the status alone.
+        String currentStatus = incident.getStatus();
+        if ("NEW".equals(currentStatus) || "ASSESSING".equals(currentStatus) || "AWAITING_TRIAGE".equals(currentStatus)) {
+            incident.setStatus("RCA_COMPLETE");
+        }
 
         incidentRepository.save(incident);
         log.info("✍️ Manual disposition applied to incident {}", incidentId);
@@ -162,6 +168,7 @@ public class IncidentService {
                 .p3Count(incidentRepository.countBySeverity("P3"))
                 .averageMttrSeconds(incidentRepository.averageMttr())
                 .simulationActive(simulationActive)
+                .dailyTrend(incidentRepository.findDailyTrend())
                 .build();
     }
 

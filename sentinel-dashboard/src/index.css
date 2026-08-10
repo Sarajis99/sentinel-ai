@@ -391,8 +391,11 @@ body { font-family: var(--font-sans); background: var(--bg-primary); color: var(
   border: 1px solid transparent;
 }
 
-.health-indicator.up { color: var(--accent-emerald); background: var(--severity-p3-bg); border-color: #86efac; }
-.health-indicator.down { color: var(--severity-p0); background: var(--severity-p0-bg); border-color: #fca5a5; }
+.health-indicator.up, .health-indicator.healthy, .health-indicator.HEALTHY { color: var(--accent-emerald); background: var(--severity-p3-bg); border-color: #86efac; }
+.health-indicator.down, .health-indicator.critical, .health-indicator.CRITICAL { color: var(--severity-p0); background: var(--severity-p0-bg); border-color: #fca5a5; }
+.health-indicator.degraded, .health-indicator.DEGRADED { color: #ea580c; background: #fff7ed; border-color: #fdba74; }
+.health-indicator.warning, .health-indicator.WARNING { color: #ca8a04; background: #fefce8; border-color: #fde047; }
+.health-indicator.idle, .health-indicator.IDLE { color: #64748b; background: #f1f5f9; border-color: #cbd5e1; }
 
 /* ─── Incident Split View (Incidents Tab) ──────────────────────────────────── */
 .incident-view {
@@ -1177,14 +1180,29 @@ body { font-family: var(--font-sans); background: var(--bg-primary); color: var(
   border-color: var(--border-subtle);
 }
 
-[data-theme="dark"] .health-indicator.up {
+[data-theme="dark"] .health-indicator.up, [data-theme="dark"] .health-indicator.healthy, [data-theme="dark"] .health-indicator.HEALTHY {
   background: rgba(22, 163, 74, 0.15);
   border-color: rgba(134, 239, 172, 0.3);
 }
 
-[data-theme="dark"] .health-indicator.down {
+[data-theme="dark"] .health-indicator.down, [data-theme="dark"] .health-indicator.critical, [data-theme="dark"] .health-indicator.CRITICAL {
   background: rgba(220, 38, 38, 0.15);
   border-color: rgba(252, 165, 165, 0.3);
+}
+
+[data-theme="dark"] .health-indicator.degraded, [data-theme="dark"] .health-indicator.DEGRADED {
+  background: rgba(234, 88, 12, 0.15);
+  border-color: rgba(253, 186, 116, 0.3);
+}
+
+[data-theme="dark"] .health-indicator.warning, [data-theme="dark"] .health-indicator.WARNING {
+  background: rgba(202, 138, 4, 0.15);
+  border-color: rgba(253, 224, 71, 0.3);
+}
+
+[data-theme="dark"] .health-indicator.idle, [data-theme="dark"] .health-indicator.IDLE {
+  background: rgba(100, 116, 139, 0.15);
+  border-color: rgba(203, 213, 225, 0.3);
 }
 
 [data-theme="dark"] .btn {

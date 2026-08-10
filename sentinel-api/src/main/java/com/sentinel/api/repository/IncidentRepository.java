@@ -60,4 +60,12 @@ public interface IncidentRepository extends JpaRepository<Incident, Long> {
     // For MTTR calculation
     @Query("SELECT AVG(i.mttrSeconds) FROM Incident i WHERE i.mttrSeconds IS NOT NULL")
     Double averageMttr();
+
+    // For dashboard trend graph (last 7 days)
+    @Query(value = "SELECT TO_CHAR(detected_at, 'Mon DD') as date, COUNT(*) as incidents " +
+                   "FROM incidents " +
+                   "WHERE detected_at >= CURRENT_DATE - INTERVAL '6 days' " +
+                   "GROUP BY TO_CHAR(detected_at, 'Mon DD'), DATE(detected_at) " +
+                   "ORDER BY DATE(detected_at) ASC", nativeQuery = true)
+    List<java.util.Map<String, Object>> findDailyTrend();
 }

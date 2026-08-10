@@ -41,6 +41,12 @@ public class SettingsService {
     private static final int GCM_IV_LENGTH_BYTE = 12;
 
     public void updateApiKey(String rawKey) {
+        if (rawKey == null || rawKey.trim().isEmpty()) {
+            redisTemplate.delete(API_KEY_REDIS_KEY);
+            log.info("API Key cleared from Redis.");
+            return;
+        }
+
         try {
             byte[] keyBytes = getDerivedKey(encryptionKeyStr);
             SecretKeySpec secretKey = new SecretKeySpec(keyBytes, "AES");
@@ -140,7 +146,7 @@ public class SettingsService {
             log.error("Failed to truncate tables", e);
         }
 
-        String[] patterns = {"rca:*", "metrics:*", "simulator:*"};
+        String[] patterns = {"rca:*", "metrics:*", "simulator:*", "health:*"};
         for (String pattern : patterns) {
             Set<String> keys = redisTemplate.keys(pattern);
             if (keys != null && !keys.isEmpty()) {

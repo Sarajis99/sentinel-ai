@@ -87,9 +87,7 @@ public class SimulationService {
      * Stop the running simulation.
      */
     public boolean stopSimulation() {
-        if (!isSimulationActive()) {
-            return false;
-        }
+        boolean wasActive = isSimulationActive();
 
         if (simulationTask != null) {
             simulationTask.cancel(false);
@@ -101,8 +99,13 @@ public class SimulationService {
         }
 
         redisTemplate.delete(LOCK_KEY);
-        log.info("🛑 === SIMULATION STOPPED ===");
-        return true;
+        
+        if (wasActive) {
+            log.info("🛑 === SIMULATION STOPPED ===");
+        }
+        
+        // Return true if we actually stopped something (either the lock was active or tasks were running)
+        return wasActive || simulationTask != null || autoStopTask != null;
     }
 
     /**

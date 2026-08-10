@@ -20,7 +20,8 @@ public class SettingsController {
     @PutMapping("/settings/api-key")
     public ResponseEntity<Map<String, String>> updateApiKey(@RequestBody ApiKeyRequest request) {
         settingsService.updateApiKey(request.getApiKey());
-        return ResponseEntity.ok(Map.of("maskedKey", settingsService.getMaskedApiKey()));
+        String masked = settingsService.getMaskedApiKey();
+        return ResponseEntity.ok(Map.of("maskedKey", masked != null ? masked : ""));
     }
 
     @GetMapping("/settings/api-key")

@@ -89,9 +89,6 @@ public class RealTimeMetricsService {
         redis.expire(key, WINDOW_MINUTES + 2, TimeUnit.MINUTES);
     }
 
-    /**
-     * Update the health summary hash for quick dashboard reads
-     */
     private void updateHealthSummary(String service) {
         String key = HEALTH_PREFIX + service;
         long windowStart = Instant.now().minusSeconds(WINDOW_MINUTES * 60L).toEpochMilli();
@@ -104,8 +101,30 @@ public class RealTimeMetricsService {
 
         double errorRate = (requestCount != null && requestCount > 0 && errorCount != null)
                 ? (double) errorCount / requestCount : 0.0;
+                
+        // Calculate p99 latency
+        java.util.Set<String> latencies = redis.opsForZSet().rangeByScore(
+                METRICS_PREFIX + service + ":latency_ms", windowStart, Double.MAX_VALUE);
+        
+        java.util.List<Double> latencyList = new java.util.ArrayList<>();
+        if (latencies != null && !latencies.isEmpty()) {
+            for (String member : latencies) {
+                try {
+                    latencyList.add(Double.parseDouble(member.split(":")[0]));
+                } catch (Exception ignored) {}
+            }
+        }
+        
+        double p99Latency = 0.0;
+        if (!latencyList.isEmpty()) {
+            java.util.Collections.sort(latencyList);
+            int index = (int) Math.ceil(99.0 / 100.0 * latencyList.size()) - 1;
+            if (index < 0) index = 0;
+            p99Latency = latencyList.get(index);
+        }
 
         redis.opsForHash().put(key, "error_rate", String.format("%.4f", errorRate));
+        redis.opsForHash().put(key, "p99_latency", String.format("%.2f", p99Latency));
         redis.opsForHash().put(key, "request_count", String.valueOf(requestCount != null ? requestCount : 0));
         redis.opsForHash().put(key, "error_count", String.valueOf(errorCount != null ? errorCount : 0));
         redis.opsForHash().put(key, "last_updated", String.valueOf(LocalDateTime.now()));

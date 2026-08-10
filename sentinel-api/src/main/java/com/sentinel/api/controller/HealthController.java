@@ -63,6 +63,63 @@ public class HealthController {
         }
 
         health.put("overall", overall);
+        
+        // Add services health from Redis
+        java.util.List<String> monitoredServices = java.util.List.of(
+                "payment-service",
+                "order-service",
+                "inventory-service",
+                "notification-service",
+                "user-service"
+        );
+        Map<String, Object> servicesHealth = new LinkedHashMap<>();
+        
+        for (String s : monitoredServices) {
+            String key = "health:" + s;
+            Map<Object, Object> redisData = redisTemplate.opsForHash().entries(key);
+            
+            if (redisData == null || redisData.isEmpty()) {
+                servicesHealth.put(s, Map.of(
+                        "status", "IDLE",
+                        "errorRate", 0.0,
+                        "requestCount", 0,
+                        "lastUpdated", "No data"
+                ));
+            } else {
+                double errorRate = 0.0;
+                long requestCount = 0;
+                double p99Latency = 0.0;
+                String lastUpdated = "Unknown";
+                
+                try {
+                    errorRate = Double.parseDouble((String) redisData.getOrDefault("error_rate", "0.0"));
+                    requestCount = Long.parseLong((String) redisData.getOrDefault("request_count", "0"));
+                    p99Latency = Double.parseDouble((String) redisData.getOrDefault("p99_latency", "0.0"));
+                    lastUpdated = (String) redisData.getOrDefault("last_updated", "Unknown");
+                } catch (Exception e) {
+                    log.warn("Failed to parse health data for {}: {}", s, e.getMessage());
+                }
+                
+                String status = "HEALTHY";
+                if (errorRate > 0.30 || p99Latency > 500) {
+                    status = "CRITICAL";
+                } else if (errorRate > 0.15 || p99Latency > 250) {
+                    status = "DEGRADED";
+                } else if (errorRate >= 0.05 || p99Latency > 150) {
+                    status = "WARNING";
+                }
+                
+                servicesHealth.put(s, Map.of(
+                        "status", status,
+                        "errorRate", errorRate,
+                        "p99Latency", p99Latency,
+                        "requestCount", requestCount,
+                        "lastUpdated", lastUpdated
+                ));
+            }
+        }
+        health.put("services", servicesHealth);
+
         health.put("service", "sentinel-api");
         health.put("timestamp", java.time.LocalDateTime.now().toString());
 
