@@ -1,0 +1,20 @@
+spring:
+  datasource:
+    url: ${PROD_DB_URL}
+    username: ${PROD_DB_USERNAME}
+    password: ${PROD_DB_PASSWORD}
+  data:
+    redis:
+      host: ${PROD_REDIS_HOST}
+      port: ${PROD_REDIS_PORT}
+      password: ${PROD_REDIS_PASSWORD}
+      ssl:
+        enabled: true
+  kafka:
+    bootstrap-servers: ${PROD_KAFKA_URL}
+    properties:
+      security.protocol: SASL_SSL
+      sasl.mechanism: PLAIN
+      sasl.jaas.config: org.apache.kafka.common.security.plain.PlainLoginModule required username="${PROD_KAFKA_USER}" password="${PROD_KAFKA_PASS}";
+      ssl.truststore.type: PEM
+      ssl.truststore.location: classpath:ca.pem
