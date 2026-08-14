@@ -1,0 +1,29 @@
+# Build Stage
+FROM maven:3.9.6-eclipse-temurin-21-alpine AS build
+WORKDIR /app
+
+# Copy all POMs for dependency caching
+COPY pom.xml .
+COPY sentinel-common/pom.xml sentinel-common/
+COPY sentinel-simulator/pom.xml sentinel-simulator/
+COPY sentinel-ingestion/pom.xml sentinel-ingestion/
+COPY sentinel-detector/pom.xml sentinel-detector/
+COPY sentinel-rca/pom.xml sentinel-rca/
+COPY sentinel-api/pom.xml sentinel-api/
+
+# Copy source code and build
+COPY . .
+RUN mvn clean package -DskipTests -pl sentinel-common,sentinel-api -am
+
+# Run Stage
+FROM eclipse-temurin:21-jre-alpine
+WORKDIR /app
+
+# Copy the built jar
+COPY --from=build /app/sentinel-api/target/sentinel-api-*.jar app.jar
+
+# Expose the port
+EXPOSE 8084
+
+# Run with prod profile
+ENTRYPOINT ["java", "-jar", "app.jar", "--spring.profiles.active=prod"]
