@@ -15,5 +15,6 @@ RUN mvn clean package -DskipTests -pl sentinel-common,sentinel-detector -am
 FROM eclipse-temurin:21-jre-alpine
 WORKDIR /app
 COPY --from=build /app/sentinel-detector/target/sentinel-detector-*.jar app.jar
+COPY --from=build /app/sentinel-common/src/main/resources/ca.pem /app/ca.pem
 EXPOSE 8080
-ENTRYPOINT ["java", "-jar", "app.jar", "--spring.profiles.active=prod"]
+ENTRYPOINT ["java", "-jar", "app.jar", "--spring.profiles.active=prod", "--spring.kafka.properties.ssl.truststore.location=/app/ca.pem"]
