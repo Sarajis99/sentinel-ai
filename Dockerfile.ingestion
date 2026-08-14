@@ -1,0 +1,19 @@
+# Build Stage
+FROM maven:3.9.6-eclipse-temurin-21-alpine AS build
+WORKDIR /app
+COPY pom.xml .
+COPY sentinel-common/pom.xml sentinel-common/
+COPY sentinel-simulator/pom.xml sentinel-simulator/
+COPY sentinel-ingestion/pom.xml sentinel-ingestion/
+COPY sentinel-detector/pom.xml sentinel-detector/
+COPY sentinel-rca/pom.xml sentinel-rca/
+COPY sentinel-api/pom.xml sentinel-api/
+COPY . .
+RUN mvn clean package -DskipTests -pl sentinel-common,sentinel-ingestion -am
+
+# Run Stage
+FROM eclipse-temurin:21-jre-alpine
+WORKDIR /app
+COPY --from=build /app/sentinel-ingestion/target/sentinel-ingestion-*.jar app.jar
+EXPOSE 8080
+ENTRYPOINT ["java", "-jar", "app.jar", "--spring.profiles.active=prod"]
