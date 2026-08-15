@@ -34,7 +34,7 @@ public class AnomalyRecord {
     @Column(name = "anomaly_type", nullable = false, length = 50)
     private String anomalyType;
 
-    @Column(name = "severity", nullable = false, length = 5)
+    @Column(name = "severity", nullable = false, length = 20)
     private String severity;
 
     @Column(name = "metric_name", length = 100)

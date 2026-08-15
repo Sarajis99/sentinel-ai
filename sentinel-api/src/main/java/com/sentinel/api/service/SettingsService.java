@@ -138,12 +138,14 @@ public class SettingsService {
     }
 
     public void factoryReset() {
-        log.warn("⚠️ FACTORY RESET INITIATED");
+        log.warn("🚨 FACTORY RESET INITIATED");
         
         try {
+            jdbcTemplate.execute("ALTER TABLE IF EXISTS incidents ALTER COLUMN severity TYPE varchar(20)");
+            jdbcTemplate.execute("ALTER TABLE IF EXISTS anomalies ALTER COLUMN severity TYPE varchar(20)");
             jdbcTemplate.execute("TRUNCATE TABLE incident_comments, incidents, anomalies, log_events CASCADE");
         } catch (Exception e) {
-            log.error("Failed to truncate tables", e);
+            log.error("Failed to truncate or alter tables", e);
         }
 
         String[] patterns = {"rca:*", "metrics:*", "simulator:*", "health:*"};
@@ -174,6 +176,10 @@ public class SettingsService {
         }
         redisTemplate.opsForValue().set(LOGS_PER_SECOND_KEY, String.valueOf(logsPerSecond));
         log.info("Simulation config updated: logsPerSecond = {}", logsPerSecond);
+    }
+
+    public void debugDbInsert() {
+        jdbcTemplate.execute("INSERT INTO incidents (incident_id, incident_number, anomaly_id, title, severity, status, service_name, detected_at, related_logs, similar_incidents) VALUES ('" + java.util.UUID.randomUUID() + "', 'DEBUG001', '" + java.util.UUID.randomUUID() + "', 'Debug', 'CRITICAL', 'NEW', 'debug-service', now(), '[]', '[]')");
     }
 
     private byte[] getDerivedKey(String rawKey) throws Exception {

@@ -36,7 +36,7 @@ public class Incident {
     @Column(name = "title", nullable = false, length = 500)
     private String title;
 
-    @Column(name = "severity", nullable = false, length = 5)
+    @Column(name = "severity", nullable = false, length = 20)
     private String severity;
 
     @Column(name = "status", length = 20)
