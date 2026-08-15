@@ -21,9 +21,10 @@ WORKDIR /app
 
 # Copy the built jar
 COPY --from=build /app/sentinel-api/target/sentinel-api-*.jar app.jar
+COPY --from=build /app/sentinel-common/src/main/resources/ca.pem /app/ca.pem
 
 # Expose the port
 EXPOSE 8084
 
 # Run with prod profile
-ENTRYPOINT ["java", "-jar", "app.jar", "--spring.profiles.active=prod"]
+ENTRYPOINT ["java", "-Xmx300m", "-jar", "app.jar", "--spring.profiles.active=prod", "--spring.kafka.properties.ssl.truststore.location=/app/ca.pem"]
