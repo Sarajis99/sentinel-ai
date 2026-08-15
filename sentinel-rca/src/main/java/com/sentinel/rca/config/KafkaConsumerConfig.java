@@ -38,6 +38,8 @@ public class KafkaConsumerConfig {
         deserializer.setUseTypeMapperForKey(true);
 
         Map<String, Object> props = kafkaProperties.buildConsumerProperties(null);
+        props.entrySet().removeIf(e -> e.getKey().startsWith("spring.json"));
+        
         props.put(ConsumerConfig.BOOTSTRAP_SERVERS_CONFIG, bootstrapServers);
         props.put(ConsumerConfig.GROUP_ID_CONFIG, groupId);
         props.put(ConsumerConfig.AUTO_OFFSET_RESET_CONFIG, "earliest");
