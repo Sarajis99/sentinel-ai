@@ -1,4 +1,4 @@
-const API_BASE = 'http://localhost:8084/api/v1';
+const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8084/api/v1';
 
 async function fetchJSON(url, options = {}) {
   const res = await fetch(`${API_BASE}${url}`, {
