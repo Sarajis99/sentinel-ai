@@ -17,4 +17,4 @@ WORKDIR /app
 COPY --from=build /app/sentinel-ingestion/target/sentinel-ingestion-*.jar app.jar
 COPY --from=build /app/sentinel-common/src/main/resources/ca.pem /app/ca.pem
 EXPOSE 8080
-ENTRYPOINT ["java", "-jar", "app.jar", "--spring.profiles.active=prod", "--spring.kafka.properties.ssl.truststore.location=/app/ca.pem"]
+ENTRYPOINT ["java", "-Xmx300m", "-jar", "app.jar", "--spring.profiles.active=prod", "--spring.kafka.properties.ssl.truststore.location=/app/ca.pem"]
