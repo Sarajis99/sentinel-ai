@@ -67,11 +67,7 @@ public class Incident {
     @Column(name = "confidence")
     private Double confidence;
 
-    // ─── Vector embedding (1536 dims for similarity search) ──────────────────
-    // Stored as float[] mapped to the pgvector 'vector' type via JDBC
-    @Column(name = "embedding", columnDefinition = "vector(1536)")
-    @JdbcTypeCode(SqlTypes.ARRAY)
-    private float[] embedding;
+    // Removed embedding field: requires hibernate-vector to map float[] to pgvector 'vector'
 
     // ─── Timestamps ──────────────────────────────────────────────────────────
 
