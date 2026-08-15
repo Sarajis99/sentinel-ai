@@ -31,13 +31,13 @@ public class KafkaConsumerConfig {
     private String groupId;
 
     @Bean
-    public ConsumerFactory<String, AnomalyDTO> consumerFactory() {
+    public ConsumerFactory<String, AnomalyDTO> consumerFactory(org.springframework.boot.autoconfigure.kafka.KafkaProperties kafkaProperties) {
         JsonDeserializer<AnomalyDTO> deserializer = new JsonDeserializer<>(AnomalyDTO.class);
         deserializer.setRemoveTypeHeaders(false);
         deserializer.addTrustedPackages("com.sentinel.common.dto");
         deserializer.setUseTypeMapperForKey(true);
 
-        Map<String, Object> props = new HashMap<>();
+        Map<String, Object> props = kafkaProperties.buildConsumerProperties(null);
         props.put(ConsumerConfig.BOOTSTRAP_SERVERS_CONFIG, bootstrapServers);
         props.put(ConsumerConfig.GROUP_ID_CONFIG, groupId);
         props.put(ConsumerConfig.AUTO_OFFSET_RESET_CONFIG, "earliest");
@@ -48,10 +48,10 @@ public class KafkaConsumerConfig {
     }
 
     @Bean
-    public ConcurrentKafkaListenerContainerFactory<String, AnomalyDTO> kafkaListenerContainerFactory() {
+    public ConcurrentKafkaListenerContainerFactory<String, AnomalyDTO> kafkaListenerContainerFactory(org.springframework.boot.autoconfigure.kafka.KafkaProperties kafkaProperties) {
         ConcurrentKafkaListenerContainerFactory<String, AnomalyDTO> factory =
                 new ConcurrentKafkaListenerContainerFactory<>();
-        factory.setConsumerFactory(consumerFactory());
+        factory.setConsumerFactory(consumerFactory(kafkaProperties));
         // Manual acknowledgment — commit only after RCA succeeds
         factory.getContainerProperties().setAckMode(ContainerProperties.AckMode.MANUAL_IMMEDIATE);
         factory.setConcurrency(2); // 2 parallel consumers (LLM calls can be slow)
@@ -59,8 +59,8 @@ public class KafkaConsumerConfig {
     }
 
     @Bean
-    public ConsumerFactory<String, String> stringConsumerFactory() {
-        Map<String, Object> props = new HashMap<>();
+    public ConsumerFactory<String, String> stringConsumerFactory(org.springframework.boot.autoconfigure.kafka.KafkaProperties kafkaProperties) {
+        Map<String, Object> props = kafkaProperties.buildConsumerProperties(null);
         props.put(ConsumerConfig.BOOTSTRAP_SERVERS_CONFIG, bootstrapServers);
         props.put(ConsumerConfig.GROUP_ID_CONFIG, "sentinel-rca-retry-group");
         props.put(ConsumerConfig.AUTO_OFFSET_RESET_CONFIG, "earliest");
@@ -69,9 +69,9 @@ public class KafkaConsumerConfig {
     }
 
     @Bean
-    public ConcurrentKafkaListenerContainerFactory<String, String> retryKafkaListenerContainerFactory() {
+    public ConcurrentKafkaListenerContainerFactory<String, String> retryKafkaListenerContainerFactory(org.springframework.boot.autoconfigure.kafka.KafkaProperties kafkaProperties) {
         ConcurrentKafkaListenerContainerFactory<String, String> factory = new ConcurrentKafkaListenerContainerFactory<>();
-        factory.setConsumerFactory(stringConsumerFactory());
+        factory.setConsumerFactory(stringConsumerFactory(kafkaProperties));
         return factory;
     }
 }
