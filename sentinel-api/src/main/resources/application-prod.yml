@@ -19,3 +19,6 @@ spring:
       sasl.jaas.config: org.apache.kafka.common.security.plain.PlainLoginModule required username="${PROD_KAFKA_USER}" password="${PROD_KAFKA_PASS}";
       ssl.truststore.type: PEM
       ssl.truststore.location: classpath:ca.pem
+
+cors:
+  allowed-origins: "*"
