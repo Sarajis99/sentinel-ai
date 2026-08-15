@@ -74,15 +74,15 @@ public class RCAService {
             List<LogEvent> rawLogs = contextGatherer.gatherRawLogs(anomaly);
             String logContextForPrompt = contextGatherer.formatLogsForPrompt(rawLogs);
             
-            String logContextJson = "[]";
+            com.fasterxml.jackson.databind.JsonNode logContextNode = objectMapper.createArrayNode();
             try {
-                logContextJson = objectMapper.writeValueAsString(rawLogs);
+                logContextNode = objectMapper.valueToTree(rawLogs);
             } catch (Exception e) {
                 log.warn("Failed to serialize raw logs to JSON", e);
             }
 
             // Phase 1: Create incident early (before AI)
-            incident = createInitialIncident(anomaly, logContextJson);
+            incident = createInitialIncident(anomaly, logContextNode);
 
             // Step 2: Check cache
             String cacheKey = cacheService.buildCacheKey(
@@ -226,7 +226,7 @@ public class RCAService {
         return buildSkippedResponse("Both OpenRouter and Ollama are unavailable");
     }
 
-    private Incident createInitialIncident(AnomalyDTO anomaly, String logContext) {
+    private Incident createInitialIncident(AnomalyDTO anomaly, com.fasterxml.jackson.databind.JsonNode logContext) {
         String generatedIncNumber = String.format("INC%07d", ThreadLocalRandom.current().nextInt(1000000, 10000000));
         
         Incident incident = Incident.builder()
@@ -239,6 +239,7 @@ public class RCAService {
                 .serviceName(anomaly.getServiceName())
                 .detectedAt(anomaly.getDetectedAt())
                 .relatedLogs(logContext)
+                .similarIncidents(objectMapper.createArrayNode())
                 .build();
 
         return incidentRepository.save(incident);

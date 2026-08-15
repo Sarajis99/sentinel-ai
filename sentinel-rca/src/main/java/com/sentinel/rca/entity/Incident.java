@@ -87,13 +87,11 @@ public class Incident {
 
     @Column(name = "related_logs", columnDefinition = "jsonb")
     @JdbcTypeCode(SqlTypes.JSON)
-    @Builder.Default
-    private String relatedLogs = "[]";
+    private com.fasterxml.jackson.databind.JsonNode relatedLogs;
 
     @Column(name = "similar_incidents", columnDefinition = "jsonb")
     @JdbcTypeCode(SqlTypes.JSON)
-    @Builder.Default
-    private String similarIncidents = "[]";
+    private com.fasterxml.jackson.databind.JsonNode similarIncidents;
 
     @Column(name = "created_at")
     @Builder.Default
