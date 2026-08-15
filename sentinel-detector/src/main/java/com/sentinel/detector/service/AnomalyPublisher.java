@@ -23,7 +23,7 @@ import java.util.UUID;
 @RequiredArgsConstructor
 public class AnomalyPublisher {
 
-    private final KafkaTemplate<String, AnomalyDTO> anomalyKafkaTemplate;
+    private final KafkaTemplate<String, AnomalyDTO> kafkaTemplate;
     private final AnomalyRepository anomalyRepository;
 
     private static final String TOPIC = "anomaly-events";
@@ -76,7 +76,7 @@ public class AnomalyPublisher {
                 .windowMinutes(signal.getWindowMinutes())
                 .build();
 
-        anomalyKafkaTemplate.send(TOPIC, signal.getServiceName(), dto)
+        kafkaTemplate.send(TOPIC, signal.getServiceName(), dto)
                 .whenComplete((result, ex) -> {
                     if (ex != null) {
                         log.error("Failed to publish anomaly to Kafka for service={}: {}",
