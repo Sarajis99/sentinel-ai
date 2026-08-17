@@ -10,6 +10,7 @@ import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 
 import java.time.LocalDateTime;
+import java.util.List;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -46,13 +47,13 @@ class LogEventConsumerTest {
                 .metadata(Map.of("env", "prod"))
                 .build();
 
-        consumer.consume(dto, 0, 100L);
+        consumer.consume(List.of(dto));
 
         // Verify entity mapping and saving
-        ArgumentCaptor<LogEvent> entityCaptor = ArgumentCaptor.forClass(LogEvent.class);
-        verify(repository, times(1)).save(entityCaptor.capture());
+        ArgumentCaptor<List<LogEvent>> entityCaptor = ArgumentCaptor.forClass(List.class);
+        verify(repository, times(1)).saveAll(entityCaptor.capture());
         
-        LogEvent savedEntity = entityCaptor.getValue();
+        LogEvent savedEntity = entityCaptor.getValue().get(0);
         assertEquals("da4b10b0-f3c5-42bc-9e1a-5a302449ac60", savedEntity.getEventId().toString());
         assertEquals("payment-service", savedEntity.getServiceName());
         assertEquals(LogLevel.ERROR, savedEntity.getLogLevel());
@@ -77,12 +78,12 @@ class LogEventConsumerTest {
                 .build();
 
         // Force a runtime exception during saving
-        doThrow(new RuntimeException("DB Outage")).when(repository).save(any(LogEvent.class));
+        doThrow(new RuntimeException("DB Outage")).when(repository).saveAll(anyList());
 
         // It should catch the exception and still run without throwing
-        consumer.consume(dto, 1, 200L);
+        consumer.consume(List.of(dto));
 
-        verify(repository, times(1)).save(any(LogEvent.class));
+        verify(repository, times(1)).saveAll(anyList());
         verify(metricsService, never()).updateMetrics(any());
     }
 
@@ -96,9 +97,9 @@ class LogEventConsumerTest {
                 .message("Payment processed")
                 .build();
 
-        consumer.consume(dto, 0, 101L);
+        consumer.consume(List.of(dto));
 
-        verify(repository, times(1)).save(any(LogEvent.class));
+        verify(repository, times(1)).saveAll(anyList());
         verify(metricsService, times(1)).updateMetrics(dto);
     }
 
@@ -112,10 +113,10 @@ class LogEventConsumerTest {
                 .build();
 
         // Should handle exception and not propagate
-        consumer.consume(dto, 0, 101L);
+        consumer.consume(List.of(dto));
 
         // Verify nothing saved or updated
-        verify(repository, never()).save(any(LogEvent.class));
+        verify(repository, never()).saveAll(anyList());
         verify(metricsService, never()).updateMetrics(any());
     }
 }

@@ -12,11 +12,13 @@ import org.springframework.messaging.handler.annotation.Header;
 import org.springframework.messaging.handler.annotation.Payload;
 import org.springframework.stereotype.Component;
 
+import java.util.List;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 /**
  * Consumes log events from Kafka topic: log-events
- * For each event: saves to PostgreSQL + updates Redis real-time metrics
+ * For each batch: saves to PostgreSQL + updates Redis real-time metrics
  */
 @Slf4j
 @Component
@@ -32,29 +34,33 @@ public class LogEventConsumer {
             concurrency = "3"         // 3 consumer threads for parallel processing
     )
     public void consume(
-            @Payload LogEventDTO dto,
-            @Header(KafkaHeaders.RECEIVED_PARTITION) int partition,
-            @Header(KafkaHeaders.OFFSET) long offset) {
+            @Payload List<LogEventDTO> dtos) {
 
         try {
-            // 1. Save to PostgreSQL
-            LogEvent entity = toEntity(dto);
-            logEventRepository.save(entity);
+            if (dtos == null || dtos.isEmpty()) return;
+            
+            // 1. Bulk Save to PostgreSQL (Requires spring.kafka.listener.type=batch)
+            List<LogEvent> entities = dtos.stream()
+                    .map(this::toEntity)
+                    .collect(Collectors.toList());
+            logEventRepository.saveAll(entities);
 
             // 2. Update Redis real-time metrics
-            metricsService.updateMetrics(dto);
-
-            // Log only ERRORs for visibility
-            if (dto.getLogLevel().name().equals("ERROR")) {
-                log.debug("ERROR event saved: service={} msg={}",
-                        dto.getServiceName(), dto.getMessage());
+            for (LogEventDTO dto : dtos) {
+                metricsService.updateMetrics(dto);
+                
+                // Log only ERRORs for visibility
+                if ("ERROR".equals(dto.getLogLevel().name())) {
+                    log.debug("ERROR event saved: service={} msg={}",
+                            dto.getServiceName(), dto.getMessage());
+                }
             }
 
+            log.info("r? Ingested batch of {} log events.", dtos.size());
+
         } catch (Exception e) {
-            log.error("Failed to process log event from partition={} offset={}: {}",
-                    partition, offset, e.getMessage(), e);
+            log.error("Failed to process batch of {} log events: {}", dtos.size(), e.getMessage(), e);
             // In production: send to DLQ here
-            // For now: log and continue (don't stop the consumer)
         }
     }
 
