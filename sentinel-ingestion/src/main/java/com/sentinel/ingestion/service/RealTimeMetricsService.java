@@ -40,69 +40,82 @@ public class RealTimeMetricsService {
 
     /**
      * Update all real-time metrics for a batch of log events.
-     * This dramatically improves performance by only running expensive operations
-     * (updateHealthSummary, pruneOldData) ONCE per service per batch.
+     * This dramatically improves performance by using Redis Pipelining and
+     * only running expensive operations (updateHealthSummary, pruneOldData) ONCE per service.
      */
     public void updateMetricsBatch(java.util.List<LogEventDTO> events) {
         if (events == null || events.isEmpty()) return;
 
         long now = Instant.now().toEpochMilli();
         java.util.Set<String> affectedServices = new java.util.HashSet<>();
-
         for (LogEventDTO event : events) {
-            String service = event.getServiceName();
-            affectedServices.add(service);
-
-            // 1. Increment request count
-            incrementCounter(service, "request_count", now);
-
-            // 2. Track error count if ERROR log
-            if (event.getLogLevel() == LogLevel.ERROR) {
-                incrementCounter(service, "error_count", now);
-            }
-
-            // 3. Track latency if present
-            if (event.getLatencyMs() != null) {
-                trackValue(service, "latency_ms", event.getLatencyMs(), now);
-            }
-
-            // 4. Track 5xx status codes
-            if (event.getStatusCode() != null && event.getStatusCode() >= 500) {
-                incrementCounter(service, "error_5xx_count", now);
-            }
-
-            // Track 429 Rate Limit status codes
-            if (event.getStatusCode() != null && event.getStatusCode() == 429) {
-                incrementCounter(service, "error_429_count", now);
-            }
+            affectedServices.add(event.getServiceName());
         }
 
-        // Run the expensive summary and prune operations ONCE per affected service
+        // Execute all counter increments and pruning in a single network trip via Pipelining
+        redis.executePipelined(new org.springframework.data.redis.core.SessionCallback<Object>() {
+            @Override
+            public Object execute(org.springframework.data.redis.core.RedisOperations operations) throws org.springframework.dao.DataAccessException {
+                for (LogEventDTO event : events) {
+                    String service = event.getServiceName();
+
+                    // 1. Increment request count
+                    pipelineIncrement(operations, service, "request_count", now);
+
+                    // 2. Track error count if ERROR log
+                    if (event.getLogLevel() == LogLevel.ERROR) {
+                        pipelineIncrement(operations, service, "error_count", now);
+                    }
+
+                    // 3. Track latency if present
+                    if (event.getLatencyMs() != null) {
+                        pipelineTrackValue(operations, service, "latency_ms", event.getLatencyMs(), now);
+                    }
+
+                    // 4. Track 5xx status codes
+                    if (event.getStatusCode() != null && event.getStatusCode() >= 500) {
+                        pipelineIncrement(operations, service, "error_5xx_count", now);
+                    }
+
+                    // Track 429 Rate Limit status codes
+                    if (event.getStatusCode() != null && event.getStatusCode() == 429) {
+                        pipelineIncrement(operations, service, "error_429_count", now);
+                    }
+                }
+                
+                // Prune old data for affected services
+                long cutoff = now - (WINDOW_MINUTES * 60 * 1000L);
+                String[] metrics = {"request_count", "error_count", "latency_ms", "error_5xx_count", "error_429_count"};
+                for (String service : affectedServices) {
+                    for (String metric : metrics) {
+                        String key = METRICS_PREFIX + service + ":" + metric;
+                        operations.opsForZSet().removeRangeByScore(key, 0, cutoff);
+                    }
+                }
+                return null;
+            }
+        });
+
+        // Run the expensive summary operation ONCE per affected service (must be done after pipeline executes)
         for (String service : affectedServices) {
             updateHealthSummary(service);
-            pruneOldData(service, now);
         }
     }
 
-    /**
-     * Add a timestamped counter entry to a sorted set
-     */
-    private void incrementCounter(String service, String metric, long nowMs) {
+    @SuppressWarnings("unchecked")
+    private void pipelineIncrement(org.springframework.data.redis.core.RedisOperations operations, String service, String metric, long nowMs) {
         String key = METRICS_PREFIX + service + ":" + metric;
-        // member = "1:timestamp:random" to avoid duplicates
         String member = "1:" + nowMs + ":" + Math.random();
-        redis.opsForZSet().add(key, member, nowMs);
-        redis.expire(key, WINDOW_MINUTES + 2, TimeUnit.MINUTES);
+        operations.opsForZSet().add(key, member, nowMs);
+        operations.expire(key, java.time.Duration.ofMinutes(WINDOW_MINUTES + 2));
     }
 
-    /**
-     * Add a timestamped value entry to a sorted set
-     */
-    private void trackValue(String service, String metric, double value, long nowMs) {
+    @SuppressWarnings("unchecked")
+    private void pipelineTrackValue(org.springframework.data.redis.core.RedisOperations operations, String service, String metric, double value, long nowMs) {
         String key = METRICS_PREFIX + service + ":" + metric;
         String member = value + ":" + nowMs + ":" + Math.random();
-        redis.opsForZSet().add(key, member, nowMs);
-        redis.expire(key, WINDOW_MINUTES + 2, TimeUnit.MINUTES);
+        operations.opsForZSet().add(key, member, nowMs);
+        operations.expire(key, java.time.Duration.ofMinutes(WINDOW_MINUTES + 2));
     }
 
     private void updateHealthSummary(String service) {
