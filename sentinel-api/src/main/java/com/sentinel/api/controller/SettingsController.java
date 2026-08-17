@@ -59,6 +59,19 @@ public class SettingsController {
         }
     }
 
+    @GetMapping("/settings/debug-db")
+    public ResponseEntity<Map<String, String>> debugDb() {
+        try {
+            settingsService.debugDbInsert();
+            return ResponseEntity.ok(Map.of("status", "success", "message", "Insert worked"));
+        } catch (Exception e) {
+            String cause = e.getMessage();
+            if (e.getCause() != null) cause += " | Cause: " + e.getCause().getMessage();
+            if (e.getCause() != null && e.getCause().getCause() != null) cause += " | Root: " + e.getCause().getCause().getMessage();
+            return ResponseEntity.ok(Map.of("status", "error", "message", cause));
+        }
+    }
+
     @Data
     public static class ApiKeyRequest {
         private String apiKey;

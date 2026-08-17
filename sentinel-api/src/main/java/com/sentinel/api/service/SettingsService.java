@@ -150,11 +150,12 @@ public class SettingsService {
         }
         
         try {
-            jdbcTemplate.execute("ALTER TABLE IF EXISTS incidents ALTER COLUMN severity TYPE varchar(20)");
-            jdbcTemplate.execute("ALTER TABLE IF EXISTS anomalies ALTER COLUMN severity TYPE varchar(20)");
-            jdbcTemplate.execute("TRUNCATE TABLE incident_comments, incidents, anomalies, log_events CASCADE");
+            jdbcTemplate.execute("DELETE FROM incident_comments");
+            jdbcTemplate.execute("DELETE FROM incidents");
+            jdbcTemplate.execute("DELETE FROM anomalies");
+            jdbcTemplate.execute("DELETE FROM log_events");
         } catch (Exception e) {
-            log.error("Failed to truncate or alter tables", e);
+            log.error("Failed to delete records from tables", e);
         }
 
         String[] patterns = {"rca:*", "metrics:*", "simulator:*", "health:*"};
