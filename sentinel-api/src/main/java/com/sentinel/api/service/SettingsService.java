@@ -29,6 +29,7 @@ public class SettingsService {
 
     private final StringRedisTemplate redisTemplate;
     private final JdbcTemplate jdbcTemplate;
+    private final SimulationService simulationService;
     private final RestTemplate restTemplate = new RestTemplate();
 
     @Value("${SETTINGS_ENCRYPTION_KEY:sentinel-ai-default-encryption-key-32b}")
@@ -139,6 +140,14 @@ public class SettingsService {
 
     public void factoryReset() {
         log.warn("🚨 FACTORY RESET INITIATED");
+        
+        try {
+            // Stop simulation gracefully before wiping the lock, to prevent orphaned threads
+            simulationService.stopSimulation();
+            log.info("Any active simulation has been stopped.");
+        } catch (Exception e) {
+            log.error("Failed to stop simulation during factory reset", e);
+        }
         
         try {
             jdbcTemplate.execute("ALTER TABLE IF EXISTS incidents ALTER COLUMN severity TYPE varchar(20)");
