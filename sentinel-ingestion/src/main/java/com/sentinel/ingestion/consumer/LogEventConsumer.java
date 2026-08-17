@@ -45,10 +45,11 @@ public class LogEventConsumer {
                     .collect(Collectors.toList());
             logEventRepository.saveAll(entities);
 
-            // 2. Update Redis real-time metrics
+            // 2. Update Redis real-time metrics for the entire batch
+            metricsService.updateMetricsBatch(dtos);
+
+            // 3. Log errors for visibility
             for (LogEventDTO dto : dtos) {
-                metricsService.updateMetrics(dto);
-                
                 // Log only ERRORs for visibility
                 if ("ERROR".equals(dto.getLogLevel().name())) {
                     log.debug("ERROR event saved: service={} msg={}",

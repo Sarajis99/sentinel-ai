@@ -32,40 +32,56 @@ public class RealTimeMetricsService {
     private static final String HEALTH_PREFIX = "health:";
 
     /**
-     * Update all real-time metrics for this log event
+     * Update all real-time metrics for a single log event (backward compatibility)
      */
     public void updateMetrics(LogEventDTO event) {
-        String service = event.getServiceName();
+        updateMetricsBatch(java.util.Collections.singletonList(event));
+    }
+
+    /**
+     * Update all real-time metrics for a batch of log events.
+     * This dramatically improves performance by only running expensive operations
+     * (updateHealthSummary, pruneOldData) ONCE per service per batch.
+     */
+    public void updateMetricsBatch(java.util.List<LogEventDTO> events) {
+        if (events == null || events.isEmpty()) return;
+
         long now = Instant.now().toEpochMilli();
+        java.util.Set<String> affectedServices = new java.util.HashSet<>();
 
-        // 1. Increment request count
-        incrementCounter(service, "request_count", now);
+        for (LogEventDTO event : events) {
+            String service = event.getServiceName();
+            affectedServices.add(service);
 
-        // 2. Track error count if ERROR log
-        if (event.getLogLevel() == LogLevel.ERROR) {
-            incrementCounter(service, "error_count", now);
+            // 1. Increment request count
+            incrementCounter(service, "request_count", now);
+
+            // 2. Track error count if ERROR log
+            if (event.getLogLevel() == LogLevel.ERROR) {
+                incrementCounter(service, "error_count", now);
+            }
+
+            // 3. Track latency if present
+            if (event.getLatencyMs() != null) {
+                trackValue(service, "latency_ms", event.getLatencyMs(), now);
+            }
+
+            // 4. Track 5xx status codes
+            if (event.getStatusCode() != null && event.getStatusCode() >= 500) {
+                incrementCounter(service, "error_5xx_count", now);
+            }
+
+            // Track 429 Rate Limit status codes
+            if (event.getStatusCode() != null && event.getStatusCode() == 429) {
+                incrementCounter(service, "error_429_count", now);
+            }
         }
 
-        // 3. Track latency if present
-        if (event.getLatencyMs() != null) {
-            trackValue(service, "latency_ms", event.getLatencyMs(), now);
+        // Run the expensive summary and prune operations ONCE per affected service
+        for (String service : affectedServices) {
+            updateHealthSummary(service);
+            pruneOldData(service, now);
         }
-
-        // 4. Track 5xx status codes
-        if (event.getStatusCode() != null && event.getStatusCode() >= 500) {
-            incrementCounter(service, "error_5xx_count", now);
-        }
-
-        // Track 429 Rate Limit status codes
-        if (event.getStatusCode() != null && event.getStatusCode() == 429) {
-            incrementCounter(service, "error_429_count", now);
-        }
-
-        // 5. Update health summary hash
-        updateHealthSummary(service);
-
-        // 6. Prune old data (older than window)
-        pruneOldData(service, now);
     }
 
     /**
