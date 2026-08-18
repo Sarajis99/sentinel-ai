@@ -47,7 +47,17 @@ public class ErrorRateAnalyser {
         }
 
         String lastUpdatedStr = (String) redis.opsForHash().get(key, "last_updated");
-        long lastUpdated = lastUpdatedStr != null ? Long.parseLong(lastUpdatedStr) : 0;
+        long lastUpdated = 0;
+        if (lastUpdatedStr != null) {
+            try {
+                lastUpdated = java.time.LocalDateTime.parse(lastUpdatedStr)
+                        .atZone(java.time.ZoneId.systemDefault())
+                        .toInstant()
+                        .toEpochMilli();
+            } catch (Exception e) {
+                // fallback
+            }
+        }
         
         // Prevent "ghost" anomalies: if the data hasn't been updated in 60s, it's a stale spike
         if (System.currentTimeMillis() - lastUpdated > 60_000) {
