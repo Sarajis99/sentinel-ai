@@ -123,6 +123,11 @@ public class OllamaClient implements LLMClient {
 
             JsonNode rcaJson = objectMapper.readTree(content);
 
+            String summary = rcaJson.path("rcaSummary").asText();
+            String rootCause = rcaJson.path("rootCause").asText();
+            boolean isValid = summary != null && !summary.isBlank() && !summary.equals("null") &&
+                              rootCause != null && !rootCause.isBlank() && !rootCause.equals("UNKNOWN");
+
             return RCAResponse.builder()
                     .rootCause(rcaJson.path("rootCause").asText("UNKNOWN"))
                     .title(rcaJson.path("title").asText("Incident detected"))
@@ -132,7 +137,7 @@ public class OllamaClient implements LLMClient {
                     .suggestedFix(rcaJson.path("suggestedFix").asText())
                     .prevention(rcaJson.path("prevention").asText())
                     .confidence(rcaJson.path("confidence").asDouble(0.5))
-                    .parseSuccess(true)
+                    .parseSuccess(isValid)
                     .build();
 
         } catch (Exception e) {

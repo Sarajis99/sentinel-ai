@@ -123,7 +123,12 @@ public class OpenRouterClient implements LLMClient {
                     String.class
             );
 
-            return parseResponse(response.getBody());
+            RCAResponse parsedResponse = parseResponse(response.getBody());
+            if (!parsedResponse.isParseSuccess()) {
+                log.warn("❌ Model {} returned invalid JSON structure, trying fallback", modelToTry);
+                return tryNextFallback(prompt, fallbackIndex);
+            }
+            return parsedResponse;
 
         } catch (HttpClientErrorException e) {
             // These errors mean the model is likely no longer free, restricted, or doesn't exist
@@ -231,6 +236,11 @@ public class OpenRouterClient implements LLMClient {
 
             JsonNode rcaJson = objectMapper.readTree(content);
 
+            String summary = rcaJson.path("rcaSummary").asText();
+            String rootCause = rcaJson.path("rootCause").asText();
+            boolean isValid = summary != null && !summary.isBlank() && !summary.equals("null") &&
+                              rootCause != null && !rootCause.isBlank() && !rootCause.equals("UNKNOWN");
+
             return RCAResponse.builder()
                     .rootCause(rcaJson.path("rootCause").asText("UNKNOWN"))
                     .title(rcaJson.path("title").asText("Incident detected"))
@@ -240,7 +250,7 @@ public class OpenRouterClient implements LLMClient {
                     .suggestedFix(rcaJson.path("suggestedFix").asText())
                     .prevention(rcaJson.path("prevention").asText())
                     .confidence(rcaJson.path("confidence").asDouble(0.5))
-                    .parseSuccess(true)
+                    .parseSuccess(isValid)
                     .build();
 
         } catch (Exception e) {
