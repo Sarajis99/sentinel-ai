@@ -71,6 +71,12 @@ public class ZScoreAnalyser {
             return Optional.empty();
         }
 
+        long latestTimestamp = parseTimestamp(latestMember);
+        // Prevent "ghost" anomalies: if the data hasn't been updated in 60s, it's a stale spike
+        if (latestTimestamp > 0 && (System.currentTimeMillis() - latestTimestamp > 60_000)) {
+            return Optional.empty();
+        }
+
         double latestValue = parseValue(latestMember);
         double zScore = Math.abs(latestValue - mean) / stdDev;
 
@@ -106,6 +112,16 @@ public class ZScoreAnalyser {
         } catch (NumberFormatException e) {
             return Double.NaN;
         }
+    }
+
+    private long parseTimestamp(String member) {
+        try {
+            String[] parts = member.split(":");
+            if (parts.length > 1) {
+                return Long.parseLong(parts[1]);
+            }
+        } catch (Exception e) {}
+        return 0L;
     }
 
     private double calculateMean(double[] values) {
