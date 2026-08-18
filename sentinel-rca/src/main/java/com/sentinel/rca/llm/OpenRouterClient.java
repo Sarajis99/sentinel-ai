@@ -40,7 +40,7 @@ public class OpenRouterClient implements LLMClient {
 
     private final RestTemplate restTemplate;
     private final ObjectMapper objectMapper;
-    private final List<String> freeFallbackModels = new ArrayList<>();
+
 
     private final StringRedisTemplate redisTemplate;
 
@@ -68,9 +68,17 @@ public class OpenRouterClient implements LLMClient {
         this.redisTemplate = redisTemplate;
     }
 
+    private final List<String> fallbackModels = new ArrayList<>();
+
     @PostConstruct
     public void init() {
         if (!isAvailable()) return;
+        
+        // 1. Add our proven, rock-solid curated models FIRST (these cross different upstream providers)
+        fallbackModels.add("qwen/qwen-2.5-72b-instruct:free");
+        fallbackModels.add("meta-llama/llama-3.3-70b-instruct:free");
+        
+        // 2. Fetch the dynamic list and append to the back
         fetchFreeModels();
     }
 
@@ -82,24 +90,25 @@ public class OpenRouterClient implements LLMClient {
 
             for (JsonNode modelNode : root.path("data")) {
                 JsonNode pricing = modelNode.path("pricing");
-                // Check if prompt and completion are completely free ("0")
                 if ("0".equals(pricing.path("prompt").asText()) && "0".equals(pricing.path("completion").asText())) {
                     String modelId = modelNode.path("id").asText();
-                    // Prioritize fast instruction models
-                    if (modelId.contains("flash") || modelId.contains("instruct") || modelId.contains("it")) {
-                        freeFallbackModels.add(0, modelId); // Add to front
-                    } else {
-                        freeFallbackModels.add(modelId);
+                    
+                    // Don't add if it's already in our curated list, or if it's the default model
+                    if (!fallbackModels.contains(modelId) && !modelId.equals(defaultModel)) {
+                        // Prioritize fast instruction models by inserting them immediately after our curated models
+                        if (modelId.contains("flash") || modelId.contains("instruct") || modelId.contains("it")) {
+                            fallbackModels.add(2, modelId); 
+                        } else {
+                            fallbackModels.add(modelId);    
+                        }
                     }
                 }
             }
-            log.info("✅ Found {} free fallback models. Top priority: {}", freeFallbackModels.size(), 
-                    freeFallbackModels.isEmpty() ? "none" : freeFallbackModels.get(0));
+            log.info("✅ Fallback list ready. Top fallbacks: {}, {}", fallbackModels.get(0), fallbackModels.get(1));
             
         } catch (Exception e) {
-            log.warn("⚠️ Failed to fetch free models from OpenRouter (fallback mechanism may be degraded): {}", e.getMessage());
-            // Pre-seed with some known reliable free models just in case the API call failed
-            freeFallbackModels.addAll(List.of("google/gemini-2.5-flash:free", "google/gemma-2-9b-it:free", "qwen/qwen-2.5-72b-instruct:free"));
+            log.warn("⚠️ Failed to fetch dynamic free models: {}", e.getMessage());
+            // It's okay, we already seeded the curated list in init()
         }
     }
 
@@ -147,15 +156,10 @@ public class OpenRouterClient implements LLMClient {
     }
     
     private RCAResponse tryNextFallback(String prompt, int currentIndex) {
-        if (currentIndex < freeFallbackModels.size() && currentIndex < 3) { // Cap at 3 fallback attempts
-            String nextModel = freeFallbackModels.get(currentIndex);
-            // Skip if the fallback model is exactly the one we just failed on
-            if (nextModel.equals(defaultModel) && currentIndex + 1 < freeFallbackModels.size()) {
-                 nextModel = freeFallbackModels.get(currentIndex + 1);
-                 currentIndex++;
-            }
-            log.info("🔄 Auto-healing: Falling back to alternative free model: {}", nextModel);
-            return attemptGenerateWithFallback(prompt, nextModel, currentIndex + 1);
+        if (currentIndex < fallbackModels.size() && currentIndex < 4) { // Cap at 4 fallback attempts (5 total LLM calls)
+             String nextModel = fallbackModels.get(currentIndex);
+             log.info("🔄 Auto-healing: Falling back to alternative free model: {}", nextModel);
+             return attemptGenerateWithFallback(prompt, nextModel, currentIndex + 1);
         }
         
         log.error("💥 All fallback models exhausted or unavailable.");

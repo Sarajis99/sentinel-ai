@@ -98,11 +98,16 @@ public class RCAService {
                 incident.setStatus("ASSESSING");
                 incidentRepository.save(incident);
 
-                // Step 4: Build prompt
-                String prompt = promptBuilder.build(anomaly, logContextForPrompt);
+                if (rawLogs.isEmpty()) {
+                    log.warn("⚠️ No logs found for anomaly {} window, skipping LLM analysis", anomaly.getAnomalyId());
+                    rcaResponse = buildSkippedResponse("No logs found in the DB for the anomaly time window.");
+                } else {
+                    // Step 4: Build prompt
+                    String prompt = promptBuilder.build(anomaly, logContextForPrompt);
 
-                // Step 5: Call LLM (with rate limiting + fallback)
-                rcaResponse = callLLMWithFallback(prompt);
+                    // Step 5: Call LLM (with rate limiting + fallback)
+                    rcaResponse = callLLMWithFallback(prompt);
+                }
 
                 // Step 8: Cache the result
                 cacheResponse(cacheKey, rcaResponse);
@@ -161,6 +166,12 @@ public class RCAService {
 
         try {
             List<LogEvent> rawLogs = contextGatherer.gatherRawLogs(anomaly);
+            if (rawLogs.isEmpty()) {
+                log.warn("⚠️ No logs found for anomaly {} window, skipping LLM analysis", anomaly.getAnomalyId());
+                RCAResponse rcaResponse = buildSkippedResponse("No logs found in the DB for the anomaly time window. The incident may be too old or logs were not ingested.");
+                updateIncidentWithRCA(incident, rcaResponse);
+                return incident;
+            }
             String logContextForPrompt = contextGatherer.formatLogsForPrompt(rawLogs);
 
             String prompt = promptBuilder.build(anomaly, logContextForPrompt);
