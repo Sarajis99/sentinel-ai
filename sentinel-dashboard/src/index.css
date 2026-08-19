@@ -63,7 +63,7 @@
   --space-lg: 24px;
   --space-xl: 32px;
   --space-2xl: 48px;
-  --sidebar-width: 200px;
+  --sidebar-width: 250px;
 
   /* Border Radius - Sharp & Utilitarian */
   --radius-sm: 2px;
@@ -760,6 +760,7 @@ body { font-family: var(--font-sans); background: var(--bg-primary); color: var(
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 24px;
+  max-width: 900px;
 }
 
 .sn-form-col {
@@ -774,12 +775,12 @@ body { font-family: var(--font-sans); background: var(--bg-primary); color: var(
 }
 
 .sn-label {
-  flex: 0 0 110px;
+  flex: 0 0 140px;
   font-size: 0.75rem;
   font-weight: 500;
   color: #4a5e68;
   text-align: right;
-  padding-right: 12px;
+  padding-right: 16px;
 }
 
 .sn-label.required::before {
@@ -797,6 +798,7 @@ body { font-family: var(--font-sans); background: var(--bg-primary); color: var(
   color: #293e40;
   background: #ffffff;
   min-width: 0;
+  max-width: 320px;
 }
 
 .sn-input:focus, .sn-textarea:focus, .sn-select:focus {
@@ -1521,9 +1523,23 @@ body { font-family: var(--font-sans); background: var(--bg-primary); color: var(
 /* --- Responsive Media Queries ----------------------------------------------- */
 
 @media (max-width: 1400px) {
-  /* Small Laptop: stack the SN form to single column */
+  /* Small Laptop (e.g. 1366x768): compact everything so the detail panel has room */
+  :root {
+    --sidebar-width: 200px;
+  }
+
   .sn-form-grid {
     grid-template-columns: 1fr;
+    max-width: none;
+  }
+
+  .sn-label {
+    flex: 0 0 110px;
+    padding-right: 12px;
+  }
+
+  .sn-input, .sn-textarea, .sn-select {
+    max-width: none;
   }
 }
 
