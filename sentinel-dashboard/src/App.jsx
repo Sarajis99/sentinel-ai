@@ -88,6 +88,7 @@ export default function App() {
   const [newComment, setNewComment] = useState('');
   const [retrying, setRetrying] = useState(false);
   const [theme, setTheme] = useState(() => localStorage.getItem('sentinel-theme') || 'light');
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
 
   // Chaos panel state
   const [chaosTarget, setChaosTarget] = useState('payment-service');
@@ -586,7 +587,7 @@ export default function App() {
   const renderIncidentsView = () => (
     <div className="incident-view">
       {/* Left: Incident List */}
-      <div className="incident-list-panel">
+      <div className={`incident-list-panel ${selected ? 'mobile-hide' : ''}`}>
         <div className="panel-header">
           <span className="panel-title">Active Queue</span>
           <span className="badge" style={{background: 'var(--bg-primary)'}}>{incidents.length} loaded</span>
@@ -623,18 +624,23 @@ export default function App() {
       </div>
 
       {/* Right: Detail Panel */}
-      <div className="detail-panel">
+      <div className={`incident-detail-panel ${!selected ? 'mobile-hide' : ''}`} style={{display: 'flex', flexDirection: 'column', overflow: 'hidden'}}>
         {!selected ? (
           <div className="empty-state">
             <div className="empty-state__icon">📋</div>
             <div>Select an incident from the queue to view RCA details.</div>
           </div>
         ) : (
-          <>
-            <div className="detail-header" style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center'}}>
-              <div className="detail-header__top" style={{marginBottom: 0}}>
-                <span className="incident-number-badge">{selected.incidentNumber || 'INC-NEW'}</span>
-                <h2 className="detail-header__title" style={{marginBottom: 0, display: 'inline-block'}}>{selected.title}</h2>
+          <div className="detail-panel" style={{flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', padding: 0}}>
+            <div className="detail-header" style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px', padding: '16px 24px', borderBottom: '1px solid var(--border-subtle)'}}>
+              <div style={{display: 'flex', alignItems: 'center', gap: '8px'}}>
+                <button className="mobile-back-btn" onClick={() => setSelected(null)}>
+                  <ChevronLeft size={16} /> Back
+                </button>
+                <div className="detail-header__top" style={{marginBottom: 0}}>
+                  <span className="incident-number-badge">{selected.incidentNumber || 'INC-NEW'}</span>
+                  <h2 className="detail-header__title" style={{marginBottom: 0, display: 'inline-block'}}>{selected.title}</h2>
+                </div>
               </div>
               
               <div className="action-bar" style={{borderTop: 'none', padding: 0, background: 'transparent'}}>
@@ -956,7 +962,7 @@ export default function App() {
                   </div>
                 )}
               </div>
-          </>
+            </div>
         )}
       </div>
     </div>
@@ -1090,7 +1096,11 @@ export default function App() {
       </div>
 
       {/* ─── Global Sidebar (Left) ────────────────────────────────────── */}
-      <aside className="sidebar">
+      <div 
+        className={`sidebar-overlay ${isSidebarOpen ? 'open' : ''}`}
+        onClick={() => setIsSidebarOpen(false)}
+      ></div>
+      <aside className={`sidebar ${isSidebarOpen ? 'open' : ''}`}>
         <div className="sidebar__brand">
           <ShieldAlert className="sidebar__logo-icon" size={28} />
           <div className="sidebar__logo-text">
@@ -1102,19 +1112,19 @@ export default function App() {
         <nav className="sidebar__nav">
           <div 
             className={`nav-item ${currentView === 'dashboard' ? 'active' : ''}`}
-            onClick={() => setCurrentView('dashboard')}
+            onClick={() => { setCurrentView('dashboard'); setIsSidebarOpen(false); }}
           >
             <BarChart2 className="icon" /> Dashboard
           </div>
           <div 
             className={`nav-item ${currentView === 'incidents' ? 'active' : ''}`}
-            onClick={() => setCurrentView('incidents')}
+            onClick={() => { setCurrentView('incidents'); setIsSidebarOpen(false); }}
           >
             <AlertCircle className="icon" /> Incidents
           </div>
           <div 
             className={`nav-item ${currentView === 'settings' ? 'active' : ''}`}
-            onClick={() => setCurrentView('settings')}
+            onClick={() => { setCurrentView('settings'); setIsSidebarOpen(false); }}
           >
             <Settings className="icon" /> Settings
           </div>
@@ -1146,6 +1156,13 @@ export default function App() {
         
         {/* Top Header */}
         <header className="top-header">
+          <button 
+            className="mobile-menu-btn" 
+            onClick={() => setIsSidebarOpen(true)}
+            aria-label="Open Menu"
+          >
+            <Menu size={24} />
+          </button>
           <h1 className="top-header__title">
             {currentView === 'dashboard' ? 'Global Overview' : currentView === 'settings' ? 'Settings' : 'Incident Management'}
           </h1>

@@ -400,7 +400,7 @@ body { font-family: var(--font-sans); background: var(--bg-primary); color: var(
 /* ─── Incident Split View (Incidents Tab) ──────────────────────────────────── */
 .incident-view {
   display: grid;
-  grid-template-columns: 400px 1fr;
+  grid-template-columns: minmax(300px, 35%) 1fr;
   gap: var(--space-md);
   height: calc(100vh - 120px);
 }
@@ -1518,3 +1518,158 @@ body { font-family: var(--font-sans); background: var(--bg-primary); color: var(
   cursor: not-allowed;
 }
 
+
+/* --- Responsive Media Queries ----------------------------------------------- */
+
+@media (max-width: 1024px) {
+  /* Tablet/Small Laptop adjustments */
+  .dashboard-grid {
+    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  }
+  
+  .incident-view {
+    grid-template-columns: 300px 1fr;
+  }
+
+  .sn-form-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 768px) {
+  /* Mobile adjustments */
+  .app-layout {
+    grid-template-columns: 1fr;
+  }
+
+  /* Hamburger and Mobile Top Header */
+  .mobile-menu-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: none;
+    border: none;
+    color: var(--text-primary);
+    cursor: pointer;
+    margin-right: 12px;
+  }
+  
+  .top-header {
+    padding: var(--space-sm) var(--space-md);
+  }
+
+  /* Sidebar styling for mobile (drawer mode) */
+  .sidebar {
+    position: fixed;
+    top: 0;
+    left: 0;
+    height: 100vh;
+    width: var(--sidebar-width);
+    transform: translateX(-100%);
+    transition: transform var(--transition-normal);
+    z-index: 1000;
+  }
+
+  .sidebar.open {
+    transform: translateX(0);
+  }
+
+  /* Dark overlay when sidebar is open */
+  .sidebar-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.5);
+    z-index: 999;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity var(--transition-normal);
+  }
+
+  .sidebar-overlay.open {
+    opacity: 1;
+    pointer-events: auto;
+  }
+
+  /* Incident Split View on Mobile */
+  .incident-view {
+    display: flex;
+    flex-direction: column;
+    height: calc(100vh - 80px);
+  }
+
+  .incident-list-panel {
+    flex: 1;
+    display: flex;
+  }
+  
+  .incident-detail-panel {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+  }
+
+  /* Helper classes for mobile toggle */
+  .mobile-hide {
+    display: none !important;
+  }
+
+  /* Allow tabs to scroll horizontally */
+  .tabs {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    white-space: nowrap;
+    padding-bottom: 2px;
+  }
+  
+  .tabs::-webkit-scrollbar {
+    height: 4px;
+  }
+  
+  /* Mobile Back Button */
+  .mobile-back-btn {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    background: none;
+    border: none;
+    color: var(--accent-primary);
+    font-size: 0.85rem;
+    font-weight: 600;
+    cursor: pointer;
+    padding: 8px 12px;
+    margin-bottom: 8px;
+  }
+  
+  .action-bar {
+    flex-wrap: wrap;
+  }
+
+  /* Form adjustments for mobile */
+  .sn-form-group {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 4px;
+  }
+  
+  .sn-label {
+    text-align: left;
+    padding-right: 0;
+    flex: none;
+  }
+  
+  .sn-input, .sn-textarea, .sn-select {
+    max-width: 100%;
+    width: 100%;
+  }
+}
+
+/* Ensure mobile-specific elements are hidden on desktop */
+@media (min-width: 769px) {
+  .mobile-menu-btn, .mobile-back-btn, .sidebar-overlay {
+    display: none !important;
+  }
+}
