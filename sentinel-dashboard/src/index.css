@@ -63,7 +63,7 @@
   --space-lg: 24px;
   --space-xl: 32px;
   --space-2xl: 48px;
-  --sidebar-width: 250px;
+  --sidebar-width: 200px;
 
   /* Border Radius - Sharp & Utilitarian */
   --radius-sm: 2px;
@@ -400,7 +400,7 @@ body { font-family: var(--font-sans); background: var(--bg-primary); color: var(
 /* ─── Incident Split View (Incidents Tab) ──────────────────────────────────── */
 .incident-view {
   display: grid;
-  grid-template-columns: minmax(300px, 35%) 1fr;
+  grid-template-columns: minmax(260px, 30%) 1fr;
   gap: var(--space-md);
   height: calc(100vh - 120px);
 }
@@ -446,7 +446,8 @@ body { font-family: var(--font-sans); background: var(--bg-primary); color: var(
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  max-width: 250px;
+  flex: 1;
+  min-width: 0;
 }
 
 .feed-item__meta {
@@ -759,7 +760,6 @@ body { font-family: var(--font-sans); background: var(--bg-primary); color: var(
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 24px;
-  max-width: 900px;
 }
 
 .sn-form-col {
@@ -774,12 +774,12 @@ body { font-family: var(--font-sans); background: var(--bg-primary); color: var(
 }
 
 .sn-label {
-  flex: 0 0 140px;
+  flex: 0 0 110px;
   font-size: 0.75rem;
   font-weight: 500;
   color: #4a5e68;
   text-align: right;
-  padding-right: 16px;
+  padding-right: 12px;
 }
 
 .sn-label.required::before {
@@ -797,7 +797,6 @@ body { font-family: var(--font-sans); background: var(--bg-primary); color: var(
   color: #293e40;
   background: #ffffff;
   min-width: 0;
-  max-width: 320px;
 }
 
 .sn-input:focus, .sn-textarea:focus, .sn-select:focus {
@@ -1521,18 +1520,21 @@ body { font-family: var(--font-sans); background: var(--bg-primary); color: var(
 
 /* --- Responsive Media Queries ----------------------------------------------- */
 
+@media (max-width: 1400px) {
+  /* Small Laptop: stack the SN form to single column */
+  .sn-form-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
 @media (max-width: 1024px) {
   /* Tablet/Small Laptop adjustments */
   .dashboard-grid {
-    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
   }
   
   .incident-view {
-    grid-template-columns: 300px 1fr;
-  }
-
-  .sn-form-grid {
-    grid-template-columns: 1fr;
+    grid-template-columns: 260px 1fr;
   }
 }
 
