@@ -27,23 +27,33 @@ public class WakeUpService {
     public WakeUpService(RestTemplateBuilder restTemplateBuilder) {
         this.restTemplate = restTemplateBuilder
                 .setConnectTimeout(Duration.ofSeconds(5))
-                .setReadTimeout(Duration.ofSeconds(5))
+                .setReadTimeout(Duration.ofSeconds(60)) // Allow 60s for Render to wake up
                 .build();
     }
 
     public Map<String, String> wakeAllServices() {
+        // Ping all 3 services asynchronously
         CompletableFuture<String> ingestionFuture = pingService(ingestionUrl);
         CompletableFuture<String> detectorFuture = pingService(detectorUrl);
         CompletableFuture<String> rcaFuture = pingService(rcaUrl);
 
-        CompletableFuture.allOf(ingestionFuture, detectorFuture, rcaFuture).join();
-
+        // Wait a maximum of 1.5 seconds for responses so the UI doesn't freeze
         Map<String, String> statuses = new HashMap<>();
-        statuses.put("sentinel-ingestion", ingestionFuture.join());
-        statuses.put("sentinel-detector", detectorFuture.join());
-        statuses.put("sentinel-rca", rcaFuture.join());
+        statuses.put("sentinel-ingestion", resolveQuickly(ingestionFuture));
+        statuses.put("sentinel-detector", resolveQuickly(detectorFuture));
+        statuses.put("sentinel-rca", resolveQuickly(rcaFuture));
 
         return statuses;
+    }
+
+    private String resolveQuickly(CompletableFuture<String> future) {
+        try {
+            return future.get(1500, java.util.concurrent.TimeUnit.MILLISECONDS);
+        } catch (java.util.concurrent.TimeoutException e) {
+            return "STARTING"; // Still booting in the background thread
+        } catch (Exception e) {
+            return "STARTING"; 
+        }
     }
 
     private CompletableFuture<String> pingService(String baseUrl) {
