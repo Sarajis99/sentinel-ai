@@ -1,0 +1,19 @@
+name: Kafka Keep-Alive
+
+on:
+  schedule:
+    # Runs at minute 0 past every 12th hour (e.g. 00:00 and 12:00 UTC)
+    - cron: '0 */12 * * *'
+  workflow_dispatch: # Allows you to manually trigger it from the GitHub Actions tab
+
+jobs:
+  keepalive:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ping Sentinel API
+        # --max-time 300 gives Render 5 full minutes to cold boot the container
+        # --fail ensures the action fails gracefully if the API is truly down
+        run: |
+          echo "Waking up Sentinel API and resetting Kafka sleep timer..."
+          curl --fail --max-time 300 -s "https://sentinel-api-tj7t.onrender.com/api/v1/health/kafka-keepalive"
+          echo -e "\nKeep-alive ping successful!"

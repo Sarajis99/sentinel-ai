@@ -44,8 +44,9 @@ public class HealthController {
             // Wake up other services so they don't sleep forever
             wakeUpService.wakeAllServices();
             
-            // Send a dummy message to a heartbeat topic to keep Aiven Kafka alive
-            kafkaTemplate.send("heartbeat", "keep-alive", java.time.Instant.now().toString());
+            // Fetch metadata for an existing topic instead of sending to a missing one
+            // This prevents 60s blocking errors while still resetting Aiven's 24h timer
+            kafkaTemplate.partitionsFor("log-events");
             
             log.info("Sent keep-alive ping to Kafka and woke up other services.");
             return ResponseEntity.ok(Map.of("status", "SUCCESS", "message", "Keep-alive ping sent to Kafka"));
