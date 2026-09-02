@@ -31,10 +31,28 @@ public class HealthController {
     private final DataSource dataSource;
     private final StringRedisTemplate redisTemplate;
     private final WakeUpService wakeUpService;
+    private final org.springframework.kafka.core.KafkaTemplate<String, Object> kafkaTemplate;
 
     @GetMapping("/services-status")
     public Map<String, String> getServicesStatus() {
         return wakeUpService.wakeAllServices();
+    }
+
+    @GetMapping("/kafka-keepalive")
+    public ResponseEntity<Map<String, String>> kafkaKeepAlive() {
+        try {
+            // Wake up other services so they don't sleep forever
+            wakeUpService.wakeAllServices();
+            
+            // Send a dummy message to a heartbeat topic to keep Aiven Kafka alive
+            kafkaTemplate.send("heartbeat", "keep-alive", java.time.Instant.now().toString());
+            
+            log.info("Sent keep-alive ping to Kafka and woke up other services.");
+            return ResponseEntity.ok(Map.of("status", "SUCCESS", "message", "Keep-alive ping sent to Kafka"));
+        } catch (Exception e) {
+            log.error("Failed to send Kafka keep-alive ping", e);
+            return ResponseEntity.internalServerError().body(Map.of("status", "ERROR", "message", e.getMessage()));
+        }
     }
 
     /**
