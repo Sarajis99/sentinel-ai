@@ -26,8 +26,8 @@ public class WakeUpService {
 
     public WakeUpService(RestTemplateBuilder restTemplateBuilder) {
         this.restTemplate = restTemplateBuilder
-                .setConnectTimeout(Duration.ofSeconds(5))
-                .setReadTimeout(Duration.ofSeconds(60)) // Allow 60s for Render to wake up
+                .setConnectTimeout(Duration.ofSeconds(3))
+                .setReadTimeout(Duration.ofSeconds(3)) // Short timeout prevents thread exhaustion
                 .build();
     }
 

@@ -84,7 +84,7 @@ export default function BootScreen({ onReady }) {
     <div className="boot-screen">
       <div className="boot-logo">🛡️</div>
       <h1 className="boot-title">Sentinel AI — Booting Up</h1>
-      <p className="boot-subtitle">Microservices are waking up from sleep mode. This takes ~30 seconds on first visit.</p>
+      <p className="boot-subtitle">Microservices are waking up from sleep mode. Because this project runs on free-tier servers, a cold boot takes <b>2 to 3 minutes</b>.</p>
 
       <div className="boot-services">
         {allServices.map(s => (
