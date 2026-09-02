@@ -66,7 +66,7 @@ class LogEventConsumerTest {
         assertNotNull(savedEntity.getMetadata());
 
         // Verify metrics update
-        verify(metricsService, times(1)).updateMetrics(dto);
+        verify(metricsService, times(1)).updateMetricsBatch(anyList());
     }
 
     @Test
@@ -84,7 +84,7 @@ class LogEventConsumerTest {
         consumer.consume(List.of(dto));
 
         verify(repository, times(1)).saveAll(anyList());
-        verify(metricsService, never()).updateMetrics(any());
+        verify(metricsService, never()).updateMetricsBatch(anyList());
     }
 
     @Test
@@ -100,7 +100,7 @@ class LogEventConsumerTest {
         consumer.consume(List.of(dto));
 
         verify(repository, times(1)).saveAll(anyList());
-        verify(metricsService, times(1)).updateMetrics(dto);
+        verify(metricsService, times(1)).updateMetricsBatch(anyList());
     }
 
     @Test
@@ -117,6 +117,6 @@ class LogEventConsumerTest {
 
         // Verify nothing saved or updated
         verify(repository, never()).saveAll(anyList());
-        verify(metricsService, never()).updateMetrics(any());
+        verify(metricsService, never()).updateMetricsBatch(anyList());
     }
 }

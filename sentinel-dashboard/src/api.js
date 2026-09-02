@@ -12,6 +12,15 @@ async function fetchJSON(url, options = {}) {
   return res.json();
 }
 
+export async function pingAPI() {
+  try {
+    const res = await fetch(`${API_BASE}/health`, { signal: AbortSignal.timeout(5000) });
+    return res.ok;
+  } catch {
+    return false;
+  }
+}
+
 export const api = {
   // Incidents
   getIncidents: (page = 0, size = 20, filters = {}) => {
@@ -50,6 +59,7 @@ export const api = {
   stopSimulation: () => fetchJSON('/system/simulate/stop', { method: 'POST' }),
   getSimulationStatus: () => fetchJSON('/system/simulation-status'),
   getHealth: () => fetchJSON('/health'),
+  getServicesStatus: () => fetchJSON('/health/services-status'),
 
   // Chaos Engineering
   injectAnomaly: (scenario, targetService) => fetchJSON('/chaos/inject', {

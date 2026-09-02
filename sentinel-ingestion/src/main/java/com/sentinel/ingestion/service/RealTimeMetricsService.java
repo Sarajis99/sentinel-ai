@@ -5,21 +5,24 @@ import com.sentinel.common.enums.LogLevel;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.redis.core.StringRedisTemplate;
+import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 
 import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.ZoneOffset;
 import java.util.concurrent.TimeUnit;
+import java.util.List;
+import java.util.Set;
+import java.util.HashSet;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.time.Duration;
+import java.util.concurrent.ConcurrentHashMap;
+import org.springframework.data.redis.core.SessionCallback;
+import org.springframework.data.redis.core.RedisOperations;
+import org.springframework.dao.DataAccessException;
 
-/**
- * Maintains real-time sliding window metrics in Redis.
- * The detector reads these metrics to detect anomalies.
- *
- * Redis structures used:
- * - Sorted Set: metrics:{service}:{metric} → score=timestamp, member=value:uuid
- * - Hash: health:{service} → {error_rate, avg_latency, request_count, last_updated}
- */
 @Slf4j
 @Service
 @RequiredArgsConstructor
@@ -27,102 +30,103 @@ public class RealTimeMetricsService {
 
     private final StringRedisTemplate redis;
 
-    private static final int WINDOW_MINUTES = 10;    // Keep 10 minutes of data
+    private static final int WINDOW_MINUTES = 10;
     private static final String METRICS_PREFIX = "metrics:";
     private static final String HEALTH_PREFIX = "health:";
+    
+    // Track services that had activity recently so we know which to summarize
+    private final Set<String> activeServices = ConcurrentHashMap.newKeySet();
+    
+    // Add import for ConcurrentHashMap
+    private static final java.util.Map<String, Boolean> knownServices = new java.util.concurrent.ConcurrentHashMap<>();
 
-    /**
-     * Update all real-time metrics for a single log event (backward compatibility)
-     */
     public void updateMetrics(LogEventDTO event) {
-        updateMetricsBatch(java.util.Collections.singletonList(event));
+        updateMetricsBatch(Collections.singletonList(event));
     }
 
-    /**
-     * Update all real-time metrics for a batch of log events.
-     * This dramatically improves performance by using Redis Pipelining and
-     * only running expensive operations (updateHealthSummary, pruneOldData) ONCE per service.
-     */
-    public void updateMetricsBatch(java.util.List<LogEventDTO> events) {
+    public void updateMetricsBatch(List<LogEventDTO> events) {
         if (events == null || events.isEmpty()) return;
 
         long now = Instant.now().toEpochMilli();
-        java.util.Set<String> affectedServices = new java.util.HashSet<>();
+        Set<String> affectedServices = new HashSet<>();
+        
         for (LogEventDTO event : events) {
-            affectedServices.add(event.getServiceName());
+            String svc = event.getServiceName();
+            if (svc != null) {
+                affectedServices.add(svc);
+                knownServices.put(svc, true);
+            }
         }
 
-        // Execute all counter increments and pruning in a single network trip via Pipelining
-        redis.executePipelined(new org.springframework.data.redis.core.SessionCallback<Object>() {
+        redis.executePipelined(new SessionCallback<Object>() {
             @Override
-            public Object execute(org.springframework.data.redis.core.RedisOperations operations) throws org.springframework.dao.DataAccessException {
+            public Object execute(RedisOperations operations) throws DataAccessException {
                 for (LogEventDTO event : events) {
                     String service = event.getServiceName();
+                    if (service == null) continue;
 
-                    // 1. Increment request count
                     pipelineIncrement(operations, service, "request_count", now);
 
-                    // 2. Track error count if ERROR log
                     if (event.getLogLevel() == LogLevel.ERROR) {
                         pipelineIncrement(operations, service, "error_count", now);
                     }
 
-                    // 3. Track latency if present
                     if (event.getLatencyMs() != null) {
                         pipelineTrackValue(operations, service, "latency_ms", event.getLatencyMs(), now);
                     }
 
-                    // 4. Track 5xx status codes
                     if (event.getStatusCode() != null && event.getStatusCode() >= 500) {
                         pipelineIncrement(operations, service, "error_5xx_count", now);
                     }
 
-                    // Track 429 Rate Limit status codes
                     if (event.getStatusCode() != null && event.getStatusCode() == 429) {
                         pipelineIncrement(operations, service, "error_429_count", now);
-                    }
-                }
-                
-                // Prune old data for affected services
-                long cutoff = now - (WINDOW_MINUTES * 60 * 1000L);
-                String[] metrics = {"request_count", "error_count", "latency_ms", "error_5xx_count", "error_429_count"};
-                for (String service : affectedServices) {
-                    for (String metric : metrics) {
-                        String key = METRICS_PREFIX + service + ":" + metric;
-                        operations.opsForZSet().removeRangeByScore(key, 0, cutoff);
                     }
                 }
                 return null;
             }
         });
-
-        // Run the expensive summary operation ONCE per affected service (must be done after pipeline executes)
-        for (String service : affectedServices) {
-            updateHealthSummary(service);
-        }
     }
 
     @SuppressWarnings("unchecked")
-    private void pipelineIncrement(org.springframework.data.redis.core.RedisOperations operations, String service, String metric, long nowMs) {
+    private void pipelineIncrement(RedisOperations operations, String service, String metric, long nowMs) {
         String key = METRICS_PREFIX + service + ":" + metric;
         String member = "1:" + nowMs + ":" + Math.random();
         operations.opsForZSet().add(key, member, nowMs);
-        operations.expire(key, java.time.Duration.ofMinutes(WINDOW_MINUTES + 2));
+        // Removed aggressive expiration per-item. Handled by Scheduled task.
     }
 
     @SuppressWarnings("unchecked")
-    private void pipelineTrackValue(org.springframework.data.redis.core.RedisOperations operations, String service, String metric, double value, long nowMs) {
+    private void pipelineTrackValue(RedisOperations operations, String service, String metric, double value, long nowMs) {
         String key = METRICS_PREFIX + service + ":" + metric;
         String member = value + ":" + nowMs + ":" + Math.random();
         operations.opsForZSet().add(key, member, nowMs);
-        operations.expire(key, java.time.Duration.ofMinutes(WINDOW_MINUTES + 2));
+        // Removed aggressive expiration per-item. Handled by Scheduled task.
     }
 
-    private void updateHealthSummary(String service) {
-        String key = HEALTH_PREFIX + service;
-        long windowStart = Instant.now().minusSeconds(WINDOW_MINUTES * 60L).toEpochMilli();
+    /**
+     * Run health summary and pruning every 5 seconds for all known services.
+     * This decouples heavy read/writes from the log stream, saving massive amounts of Redis commands.
+     */
+    @Scheduled(fixedRate = 5000)
+    public void scheduledHealthSummary() {
+        if (knownServices.isEmpty()) return;
+        
+        long nowMs = Instant.now().toEpochMilli();
+        for (String service : knownServices.keySet()) {
+            try {
+                updateHealthSummary(service, nowMs);
+                pruneOldDataAndExpire(service, nowMs);
+            } catch (Exception e) {
+                log.error("Failed to update health summary for service {}", service, e);
+            }
+        }
+    }
 
-        // Count requests and errors in window
+    private void updateHealthSummary(String service, long nowMs) {
+        String key = HEALTH_PREFIX + service;
+        long windowStart = nowMs - (WINDOW_MINUTES * 60 * 1000L);
+
         Long requestCount = redis.opsForZSet().count(
                 METRICS_PREFIX + service + ":request_count", windowStart, Double.MAX_VALUE);
         Long errorCount = redis.opsForZSet().count(
@@ -131,11 +135,10 @@ public class RealTimeMetricsService {
         double errorRate = (requestCount != null && requestCount > 0 && errorCount != null)
                 ? (double) errorCount / requestCount : 0.0;
                 
-        // Calculate p99 latency
-        java.util.Set<String> latencies = redis.opsForZSet().rangeByScore(
+        Set<String> latencies = redis.opsForZSet().rangeByScore(
                 METRICS_PREFIX + service + ":latency_ms", windowStart, Double.MAX_VALUE);
         
-        java.util.List<Double> latencyList = new java.util.ArrayList<>();
+        List<Double> latencyList = new ArrayList<>();
         if (latencies != null && !latencies.isEmpty()) {
             for (String member : latencies) {
                 try {
@@ -146,44 +149,52 @@ public class RealTimeMetricsService {
         
         double p99Latency = 0.0;
         if (!latencyList.isEmpty()) {
-            java.util.Collections.sort(latencyList);
+            Collections.sort(latencyList);
             int index = (int) Math.ceil(99.0 / 100.0 * latencyList.size()) - 1;
             if (index < 0) index = 0;
             p99Latency = latencyList.get(index);
         }
 
-        redis.opsForHash().put(key, "error_rate", String.format("%.4f", errorRate));
-        redis.opsForHash().put(key, "p99_latency", String.format("%.2f", p99Latency));
-        redis.opsForHash().put(key, "request_count", String.valueOf(requestCount != null ? requestCount : 0));
-        redis.opsForHash().put(key, "error_count", String.valueOf(errorCount != null ? errorCount : 0));
-        redis.opsForHash().put(key, "last_updated", String.valueOf(LocalDateTime.now()));
-        redis.expire(key, WINDOW_MINUTES + 2, TimeUnit.MINUTES);
+        final double finalP99Latency = p99Latency;
+        final double finalErrorRate = errorRate;
+
+        // Pipeline the hash puts to save commands
+        redis.executePipelined(new SessionCallback<Object>() {
+            @Override
+            public Object execute(RedisOperations operations) throws DataAccessException {
+                operations.opsForHash().put(key, "error_rate", String.format("%.4f", finalErrorRate));
+                operations.opsForHash().put(key, "p99_latency", String.format("%.2f", finalP99Latency));
+                operations.opsForHash().put(key, "request_count", String.valueOf(requestCount != null ? requestCount : 0));
+                operations.opsForHash().put(key, "error_count", String.valueOf(errorCount != null ? errorCount : 0));
+                operations.opsForHash().put(key, "last_updated", String.valueOf(LocalDateTime.now()));
+                operations.expire(key, Duration.ofMinutes(WINDOW_MINUTES + 2));
+                return null;
+            }
+        });
     }
 
-    /**
-     * Remove data older than the window to keep Redis lean
-     */
-    private void pruneOldData(String service, long nowMs) {
+    private void pruneOldDataAndExpire(String service, long nowMs) {
         long cutoff = nowMs - (WINDOW_MINUTES * 60 * 1000L);
         String[] metrics = {"request_count", "error_count", "latency_ms", "error_5xx_count", "error_429_count"};
 
-        for (String metric : metrics) {
-            String key = METRICS_PREFIX + service + ":" + metric;
-            redis.opsForZSet().removeRangeByScore(key, 0, cutoff);
-        }
+        redis.executePipelined(new SessionCallback<Object>() {
+            @Override
+            public Object execute(RedisOperations operations) throws DataAccessException {
+                for (String metric : metrics) {
+                    String key = METRICS_PREFIX + service + ":" + metric;
+                    operations.opsForZSet().removeRangeByScore(key, 0, cutoff);
+                    operations.expire(key, Duration.ofMinutes(WINDOW_MINUTES + 2));
+                }
+                return null;
+            }
+        });
     }
 
-    /**
-     * Get current error rate for a service (used by detector)
-     */
     public double getErrorRate(String service) {
         String rate = (String) redis.opsForHash().get(HEALTH_PREFIX + service, "error_rate");
         return rate != null ? Double.parseDouble(rate) : 0.0;
     }
 
-    /**
-     * Get count of events in window (used by detector)
-     */
     public long getCountInWindow(String service, String metric, int windowMinutes) {
         long windowStart = Instant.now().minusSeconds(windowMinutes * 60L).toEpochMilli();
         Long count = redis.opsForZSet().count(

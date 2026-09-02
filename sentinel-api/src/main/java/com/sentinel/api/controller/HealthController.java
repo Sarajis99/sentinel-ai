@@ -8,6 +8,7 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
+import com.sentinel.api.service.WakeUpService;
 import javax.sql.DataSource;
 import java.sql.Connection;
 import java.util.LinkedHashMap;
@@ -29,6 +30,12 @@ public class HealthController {
 
     private final DataSource dataSource;
     private final StringRedisTemplate redisTemplate;
+    private final WakeUpService wakeUpService;
+
+    @GetMapping("/services-status")
+    public Map<String, String> getServicesStatus() {
+        return wakeUpService.wakeAllServices();
+    }
 
     /**
      * GET /api/v1/health

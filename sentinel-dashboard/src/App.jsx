@@ -29,7 +29,8 @@ import {
   ResponsiveContainer 
 } from 'recharts';
 import './index.css';
-import { api } from './api';
+import { api, pingAPI } from './api';
+import BootScreen from './BootScreen';
 
 const POLL_INTERVAL = 10000;
 
@@ -71,6 +72,7 @@ function timeAgo(dateStr) {
 
 export default function App() {
   const [currentView, setCurrentView] = useState('dashboard');
+  const [booting, setBooting] = useState(true);
   const [incidents, setIncidents] = useState([]);
   const [page, setPage] = useState(0);
   const [selected, setSelected] = useState(null);
@@ -138,10 +140,21 @@ export default function App() {
   }, [page]);
 
   useEffect(() => {
+    if (booting) {
+      const checkInitial = async () => {
+        const isUp = await pingAPI();
+        if (isUp) {
+          setBooting(false);
+        }
+      };
+      checkInitial();
+      return;
+    }
+
     loadData();
     const interval = setInterval(loadData, POLL_INTERVAL);
     return () => clearInterval(interval);
-  }, [loadData]);
+  }, [loadData, booting]);
 
   const trendData = useMemo(() => {
     let raw = stats?.dailyTrend || [];
@@ -1080,6 +1093,10 @@ export default function App() {
   );
 
   // ─── Main Render ──────────────────────────────────────────────────────
+  if (booting) {
+    return <BootScreen onReady={() => setBooting(false)} />;
+  }
+
   return (
     <div className="app-layout">
       {/* ─── Toasts ──────────────────────────────────────────────────── */}
