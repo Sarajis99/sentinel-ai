@@ -1,93 +1,121 @@
-import { useState, useEffect } from 'react';
-import { api, pingAPI } from './api';
+import { useState, useEffect, useRef } from 'react';
+import { API_BASE } from './api';
+
+const isLocal = typeof window !== 'undefined' && window.location.hostname === 'localhost';
+
+const SERVICES = [
+  {
+    id: 'api',
+    name: 'API Gateway',
+    getUrl: () => `${API_BASE}/health`,
+  },
+  {
+    id: 'ingestion',
+    name: 'Log Ingestion',
+    getUrl: () => isLocal ? 'http://localhost:8081/ping' : (import.meta.env.VITE_INGESTION_URL || 'https://sentinel-ingestion.onrender.com/ping'),
+  },
+  {
+    id: 'detector',
+    name: 'Anomaly Detector',
+    getUrl: () => isLocal ? 'http://localhost:8082/ping' : (import.meta.env.VITE_DETECTOR_URL || 'https://sentinel-detector-c3ns.onrender.com/ping'),
+  },
+  {
+    id: 'rca',
+    name: 'RCA Engine',
+    getUrl: () => isLocal ? 'http://localhost:8083/ping' : (import.meta.env.VITE_RCA_URL || 'https://sentinel-rca.onrender.com/ping'),
+  },
+];
 
 export default function BootScreen({ onReady }) {
-  const [apiStatus, setApiStatus] = useState('Starting...');
-  const [services, setServices] = useState({
-    'Log Ingestion': 'Starting...',
-    'Anomaly Detector': 'Starting...',
-    'RCA Engine': 'Starting...',
+  const [statuses, setStatuses] = useState({
+    api: 'Starting...',
+    ingestion: 'Starting...',
+    detector: 'Starting...',
+    rca: 'Starting...',
   });
 
+  const statusesRef = useRef(statuses);
+  statusesRef.current = statuses;
+
   useEffect(() => {
-    let interval;
     let mounted = true;
+    const abortControllers = [];
 
-    const checkStatus = async () => {
-      const apiOk = await pingAPI();
-      if (!mounted) return;
+    // Worker function for each service that patiently pings until UP
+    const pingWorker = async (svc) => {
+      while (mounted && statusesRef.current[svc.id] !== 'UP') {
+        const controller = new AbortController();
+        abortControllers.push(controller);
 
-      if (!apiOk) {
-        setApiStatus('Starting...');
-        return;
-      } else {
-        setApiStatus('UP');
-      }
+        // 220s timeout gives Render's free tier plenty of time to cold boot (~160-190s)
+        const timeoutId = setTimeout(() => controller.abort(), 220000);
 
-      try {
-        const statuses = await api.getServicesStatus();
-        if (!mounted) return;
+        try {
+          const res = await fetch(svc.getUrl(), {
+            method: 'GET',
+            signal: controller.signal,
+            cache: 'no-store',
+          });
+          clearTimeout(timeoutId);
 
-        let parsed = statuses.services || statuses;
+          if (res.ok) {
+            if (!mounted) return;
+            setStatuses(prev => {
+              const updated = { ...prev, [svc.id]: 'UP' };
+              statusesRef.current = updated;
 
-        const mapKey = (key) => {
-          const k = key.toLowerCase();
-          if (k.includes('ingestion')) return 'Log Ingestion';
-          if (k.includes('detector')) return 'Anomaly Detector';
-          if (k.includes('rca')) return 'RCA Engine';
-          return key;
-        };
-
-        const nextServs = {
-          'Log Ingestion': 'Starting...',
-          'Anomaly Detector': 'Starting...',
-          'RCA Engine': 'Starting...',
-        };
-
-        for (const [k, v] of Object.entries(parsed)) {
-          const name = mapKey(k);
-          if (nextServs[name] !== undefined) {
-            nextServs[name] = typeof v === 'string' ? v : (v.status || 'Starting...');
+              // Check if all 4 are now UP
+              if (Object.values(updated).every(s => s === 'UP')) {
+                setTimeout(() => {
+                  if (mounted) onReady();
+                }, 1000);
+              }
+              return updated;
+            });
+            return; // Successfully UP, terminate worker
           }
+        } catch {
+          clearTimeout(timeoutId);
         }
 
-        setServices(nextServs);
-
-        if (apiOk && Object.values(nextServs).every(s => s === 'UP')) {
-          clearInterval(interval);
-          setTimeout(() => {
-            if (mounted) onReady();
-          }, 1000);
+        // If not UP yet, pause 3 seconds before next patient attempt
+        if (mounted && statusesRef.current[svc.id] !== 'UP') {
+          await new Promise(r => setTimeout(r, 3000));
         }
-      } catch (e) {
-        // API is up but services-status failed
       }
     };
 
-    checkStatus();
-    interval = setInterval(checkStatus, 3000);
+    // Kick off all 4 service wake-up workers concurrently from the browser
+    SERVICES.forEach(svc => {
+      pingWorker(svc);
+    });
 
     return () => {
       mounted = false;
-      clearInterval(interval);
+      abortControllers.forEach(c => {
+        try { c.abort(); } catch {}
+      });
     };
   }, [onReady]);
 
-  const allServices = [
-    { name: 'API Gateway', status: apiStatus },
-    { name: 'Log Ingestion', status: services['Log Ingestion'] },
-    { name: 'Anomaly Detector', status: services['Anomaly Detector'] },
-    { name: 'RCA Engine', status: services['RCA Engine'] },
-  ];
+  const serviceList = SERVICES.map(svc => ({
+    name: svc.name,
+    status: statuses[svc.id] || 'Starting...',
+  }));
+
+  const upCount = serviceList.filter(s => s.status === 'UP').length;
+  const progressPercent = (upCount / SERVICES.length) * 100;
 
   return (
     <div className="boot-screen">
       <div className="boot-logo">🛡️</div>
       <h1 className="boot-title">Sentinel AI — Booting Up</h1>
-      <p className="boot-subtitle">Microservices are waking up from sleep mode. Because this project runs on free-tier servers, a cold boot takes <b>2 to 3 minutes</b>.</p>
+      <p className="boot-subtitle">
+        Microservices are waking up from sleep mode. Because this project runs on free-tier servers, a cold boot takes <b>2 to 3 minutes</b>.
+      </p>
 
       <div className="boot-services">
-        {allServices.map(s => (
+        {serviceList.map(s => (
           <div key={s.name} className={`boot-service ${s.status === 'UP' ? 'ready' : ''}`}>
             <div className={`boot-service-icon ${s.status === 'UP' ? '' : 'spinning'}`}>
               {s.status === 'UP' ? '✅' : '⏳'}
@@ -101,10 +129,10 @@ export default function BootScreen({ onReady }) {
       </div>
 
       <div className="boot-progress">
-        <div 
-          className="boot-progress-bar" 
-          style={{ width: `${(allServices.filter(s => s.status === 'UP').length / 4) * 100}%` }}
-        ></div>
+        <div
+          className="boot-progress-bar"
+          style={{ width: `${progressPercent}%` }}
+        />
       </div>
     </div>
   );

@@ -41,15 +41,11 @@ public class HealthController {
     @GetMapping("/kafka-keepalive")
     public ResponseEntity<Map<String, String>> kafkaKeepAlive() {
         try {
-            // Wake up other services so they don't sleep forever
-            wakeUpService.wakeAllServices();
-            
-            // Fetch metadata for an existing topic instead of sending to a missing one
-            // This prevents 60s blocking errors while still resetting Aiven's 24h timer
+            // Fetch metadata for an existing topic to reset Aiven's 24h inactivity timer
             kafkaTemplate.partitionsFor("log-events");
             
-            log.info("Sent keep-alive ping to Kafka and woke up other services.");
-            return ResponseEntity.ok(Map.of("status", "SUCCESS", "message", "Keep-alive ping sent to Kafka"));
+            log.info("Sent keep-alive ping to Kafka successfully.");
+            return ResponseEntity.ok(Map.of("status", "SUCCESS", "message", "Kafka keep-alive successful"));
         } catch (Exception e) {
             log.error("Failed to send Kafka keep-alive ping", e);
             return ResponseEntity.internalServerError().body(Map.of("status", "ERROR", "message", e.getMessage()));
