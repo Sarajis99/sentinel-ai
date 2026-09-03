@@ -140,16 +140,7 @@ export default function App() {
   }, [page]);
 
   useEffect(() => {
-    if (booting) {
-      const checkInitial = async () => {
-        const isUp = await pingAPI();
-        if (isUp) {
-          setBooting(false);
-        }
-      };
-      checkInitial();
-      return;
-    }
+    if (booting) return; // BootScreen handles the full wake-up lifecycle
 
     loadData();
     const interval = setInterval(loadData, POLL_INTERVAL);
