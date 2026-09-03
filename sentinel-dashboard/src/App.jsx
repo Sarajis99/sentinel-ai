@@ -35,16 +35,37 @@ import { useSessionHeartbeat } from './hooks/useSessionHeartbeat';
 
 const POLL_INTERVAL = 10000;
 
+function parseLocalDate(dateStr) {
+  if (!dateStr) return null;
+  if (dateStr instanceof Date) return isNaN(dateStr.getTime()) ? null : dateStr;
+  if (typeof dateStr === 'number') return new Date(dateStr);
+
+  let str = String(dateStr).trim();
+  // Normalize space separator to 'T' (e.g. '2026-09-03 14:01:23' -> '2026-09-03T14:01:23')
+  if (/^\d{4}-\d{2}-\d{2}\s\d{2}:\d{2}/.test(str)) {
+    str = str.replace(' ', 'T');
+  }
+
+  // If timestamp has no timezone offset (e.g. '2026-09-03T14:01:23' from UTC backend),
+  // treat it as UTC by appending 'Z' so it correctly converts to the local machine time!
+  if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}/.test(str) && !str.endsWith('Z') && !/[+-]\d{2}(:\d{2})?$/.test(str)) {
+    str += 'Z';
+  }
+
+  const d = new Date(str);
+  return isNaN(d.getTime()) ? null : d;
+}
+
 function formatTime(dateStr) {
-  if (!dateStr) return '—';
-  const d = new Date(dateStr);
-  return d.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+  const d = parseLocalDate(dateStr);
+  if (!d) return '—';
+  return d.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit', second: '2-digit' });
 }
 
 function formatDate(dateStr) {
-  if (!dateStr) return '—';
-  const d = new Date(dateStr);
-  return d.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) + ' ' + formatTime(dateStr);
+  const d = parseLocalDate(dateStr);
+  if (!d) return '—';
+  return d.toLocaleDateString(undefined, { day: '2-digit', month: 'short', year: 'numeric' }) + ' ' + formatTime(d);
 }
 
 function formatMTTR(seconds) {
@@ -61,10 +82,10 @@ function getServiceClass(name) {
 }
 
 function timeAgo(dateStr) {
-  if (!dateStr) return '';
+  const d = parseLocalDate(dateStr);
+  if (!d) return '';
   const now = new Date();
-  const d = new Date(dateStr);
-  const diff = Math.floor((now - d) / 1000);
+  const diff = Math.max(0, Math.floor((now - d) / 1000));
   if (diff < 60) return 'just now';
   if (diff < 3600) return `${Math.floor(diff / 60)}m ago`;
   if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`;
@@ -207,7 +228,7 @@ export default function App() {
   const handleOpenManualModal = () => {
     if (!selected) return;
     if (selected.manualRootCause) {
-      // Editing existing manual triage
+      // Editing existing dual manual triage
       setModalForm({
         rootCause: selected.manualRootCause,
         rcaSummary: selected.manualRcaSummary || '',
@@ -215,22 +236,23 @@ export default function App() {
         suggestedFix: selected.manualSuggestedFix || '',
         prevention: selected.manualPrevention || ''
       });
-    } else if (selected.confidence != null) {
-      // Pre-fill with AI analysis draft so engineer can review and refine
+    } else if (selected.confidence == null && selected.rootCause && ['RCA_COMPLETE', 'IN_PROGRESS', 'RESOLVED', 'CLOSED'].includes(selected.status)) {
+      // Editing existing manual triage (from former awaiting triage)
       setModalForm({
-        rootCause: selected.rootCause || '',
-        rcaSummary: selected.rcaSummary || '',
-        impactAnalysis: selected.impactAnalysis || '',
-        suggestedFix: selected.suggestedFix || '',
-        prevention: selected.prevention || ''
+        rootCause: selected.rootCause,
+        rcaSummary: selected.manualRcaSummary || selected.rcaSummary || '',
+        impactAnalysis: selected.manualImpactAnalysis || selected.impactAnalysis || '',
+        suggestedFix: selected.manualSuggestedFix || selected.suggestedFix || '',
+        prevention: selected.manualPrevention || selected.prevention || ''
       });
     } else {
+      // Fresh manual triage — start completely blank so the analyst types their findings from scratch
       setModalForm({
-        rootCause: selected.rootCause || '',
-        rcaSummary: selected.rcaSummary || '',
-        impactAnalysis: selected.impactAnalysis || '',
-        suggestedFix: selected.suggestedFix || '',
-        prevention: selected.prevention || ''
+        rootCause: '',
+        rcaSummary: '',
+        impactAnalysis: '',
+        suggestedFix: '',
+        prevention: ''
       });
     }
     setShowModal(true);
@@ -1092,13 +1114,23 @@ export default function App() {
                       try {
                         const parsed = JSON.parse(selected.relatedLogs);
                         if (!Array.isArray(parsed)) return selected.relatedLogs;
-                        return parsed.map((log, idx) => (
-                          <div key={idx} style={{marginBottom: '8px', paddingBottom: '8px', borderBottom: '1px solid #e2e8f0'}}>
-                            <span style={{color: '#64748b', marginRight: '8px'}}>[{log.timestamp || log.time || '—'}]</span>
-                            <span style={{color: log.level === 'ERROR' ? '#ef4444' : log.level === 'WARN' ? '#f59e0b' : '#3b82f6', fontWeight: 600}}>{log.level || 'INFO'}</span>
-                            <span style={{marginLeft: '8px'}}>{log.message || JSON.stringify(log)}</span>
-                          </div>
-                        ));
+                        return parsed.map((log, idx) => {
+                          if (typeof log === 'string') {
+                            return (
+                              <div key={idx} style={{marginBottom: '8px', paddingBottom: '8px', borderBottom: '1px solid #e2e8f0'}}>
+                                <span>{log}</span>
+                              </div>
+                            );
+                          }
+                          const logTime = log.timestamp || log.time;
+                          return (
+                            <div key={idx} style={{marginBottom: '8px', paddingBottom: '8px', borderBottom: '1px solid #e2e8f0'}}>
+                              <span style={{color: '#64748b', marginRight: '8px'}}>[{logTime ? formatDate(logTime) : '—'}]</span>
+                              <span style={{color: log.level === 'ERROR' ? '#ef4444' : log.level === 'WARN' ? '#f59e0b' : '#3b82f6', fontWeight: 600}}>{log.level || 'INFO'}</span>
+                              <span style={{marginLeft: '8px'}}>{log.message || JSON.stringify(log)}</span>
+                            </div>
+                          );
+                        });
                       } catch (e) {
                         return selected.relatedLogs;
                       }
