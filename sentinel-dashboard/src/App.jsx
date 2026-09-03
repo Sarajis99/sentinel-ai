@@ -95,7 +95,7 @@ export default function App() {
   const [loading, setLoading] = useState(true);
   const [comments, setComments] = useState([]);
   const [newComment, setNewComment] = useState('');
-  const [retrying, setRetrying] = useState(false);
+  const [retryingMap, setRetryingMap] = useState({});
   const [theme, setTheme] = useState(() => localStorage.getItem('sentinel-theme') || 'light');
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
 
@@ -366,14 +366,12 @@ export default function App() {
 
   const handleRetryAnalysis = async (id) => {
     try {
-      setRetrying(true);
+      setRetryingMap(prev => ({ ...prev, [id]: true }));
       await api.retryAnalysis(id);
       addToast('AI analysis retry started...', 'info');
       
-      // Optimistically update UI to show spinner
-      if (selected && selected.incidentId === id) {
-        setSelected(prev => ({ ...prev, status: 'ASSESSING' }));
-      }
+      // Optimistically update UI if currently viewing this incident
+      setSelected(prev => (prev && prev.incidentId === id ? { ...prev, status: 'ASSESSING' } : prev));
 
       let attempts = 0;
       let wasAssessing = false;
@@ -385,12 +383,16 @@ export default function App() {
           
           if (updated.status === 'ASSESSING') {
             wasAssessing = true;
-            setSelected(updated);
+            setSelected(prev => (prev && prev.incidentId === id ? updated : prev));
           } else if (updated.status === 'RCA_COMPLETE' || (wasAssessing && updated.status === 'AWAITING_TRIAGE') || attempts > 15) {
             clearInterval(pollInterval);
-            setSelected(updated);
+            setSelected(prev => (prev && prev.incidentId === id ? updated : prev));
             loadData();
-            setRetrying(false);
+            setRetryingMap(prev => {
+              const next = { ...prev };
+              delete next[id];
+              return next;
+            });
             
             if (updated.status === 'RCA_COMPLETE') {
               addToast('AI analysis complete!', 'success');
@@ -402,7 +404,11 @@ export default function App() {
       }, 2000);
     } catch (err) {
       addToast(err.message, 'error');
-      setRetrying(false);
+      setRetryingMap(prev => {
+        const next = { ...prev };
+        delete next[id];
+        return next;
+      });
     }
   };
 
@@ -662,8 +668,16 @@ export default function App() {
                 )}
                 {selected.status === 'AWAITING_TRIAGE' && (
                   <>
-                    <button className="btn btn-primary" onClick={() => handleRetryAnalysis(selected.incidentId)} disabled={retrying}>
-                      {retrying ? <><span className="spinner" style={{width: '14px', height: '14px'}} /> Retrying...</> : '🔄 Retry AI Analysis'}
+                    <button 
+                      className="btn btn-primary" 
+                      onClick={() => handleRetryAnalysis(selected.incidentId)} 
+                      disabled={!!retryingMap[selected.incidentId]}
+                    >
+                      {retryingMap[selected.incidentId] ? (
+                        <><span className="spinner" style={{width: '14px', height: '14px'}} /> Retrying...</>
+                      ) : (
+                        '🔄 Retry AI Analysis'
+                      )}
                     </button>
                     <button className="btn btn-warning" onClick={handleOpenNewModal}>
                       <ShieldAlert size={14} /> Manual Triage
