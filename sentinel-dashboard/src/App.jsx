@@ -135,7 +135,16 @@ export default function App() {
         api.getHealth(),
         api.getSimulationStatus(),
       ]);
-      setIncidents(incidentData.content || []);
+      const loadedIncidents = incidentData.content || [];
+      setIncidents(loadedIncidents);
+
+      // Keep selected incident synchronized with the database
+      setSelected(prev => {
+        if (!prev) return null;
+        const match = loadedIncidents.find(i => i.incidentId === prev.incidentId);
+        return match ? { ...prev, ...match } : null;
+      });
+
       setStats(statsData);
       setHealth(healthData);
       setSimRunning(simStatus.active);
@@ -145,6 +154,12 @@ export default function App() {
       setLoading(false);
     }
   }, [page]);
+
+  useEffect(() => {
+    if (!selected) {
+      setComments([]);
+    }
+  }, [selected]);
 
   useEffect(() => {
     if (booting || isIdle) return; // Halt polling when booting or in Eco-Mode to allow sentinel-api to sleep
@@ -300,7 +315,10 @@ export default function App() {
       await api.factoryReset();
       addToast('🗑️ All data cleared successfully!', 'success');
       setShowResetConfirm(false);
-      loadData();
+      setSelected(null);
+      setComments([]);
+      setIncidents([]);
+      await loadData();
     } catch (err) { addToast(err.message, 'error'); }
     finally { setResetting(false); }
   };
@@ -645,7 +663,7 @@ export default function App() {
         {!selected ? (
           <div className="empty-state">
             <div className="empty-state__icon">📋</div>
-            <div>Select an incident from the queue to view RCA details.</div>
+            <div>{incidents.length === 0 ? 'No incidents active. System is running healthy.' : 'Select an incident from the queue to view RCA details.'}</div>
           </div>
         ) : (
           <div className="detail-panel" style={{flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', padding: 0}}>
