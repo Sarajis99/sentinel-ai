@@ -1243,7 +1243,7 @@ export default function App() {
             <div className="idle-badge">Eco-Mode Active</div>
             <h2 className="idle-title">Session Paused</h2>
             <p className="idle-desc">
-              You have been inactive for over 20 minutes. Background microservices were allowed to sleep to conserve free-tier cloud resources.
+              You have been inactive for over 40 minutes. Background microservices were allowed to sleep to conserve free-tier cloud resources.
             </p>
             <button className="idle-btn" onClick={resumeSession}>
               <Play size={16} fill="currentColor" /> Resume Session

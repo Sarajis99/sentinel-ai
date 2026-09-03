@@ -22,8 +22,8 @@ const HEARTBEAT_SERVICES = [
 
 // Configuration constants
 const HEARTBEAT_INTERVAL_MS = 8 * 60 * 1000;   // Ping every 8 minutes (Render sleeps at 15m)
-const INACTIVITY_TIMEOUT_MS = 20 * 60 * 1000;   // 20 minutes without user interaction triggers idle
-const HIDDEN_TIMEOUT_MS     = 15 * 60 * 1000;   // 15 minutes in background tab triggers idle
+const INACTIVITY_TIMEOUT_MS = 40 * 60 * 1000;  // 40 minutes without user interaction triggers idle
+const HIDDEN_TIMEOUT_MS     = 30 * 60 * 1000;  // 30 minutes in background tab triggers idle
 
 /**
  * useSessionHeartbeat
