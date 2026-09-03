@@ -67,6 +67,25 @@ public class Incident {
     @Column(name = "confidence")
     private Double confidence;
 
+    // ─── Manual Triage fields (Dual-Triage support) ──────────────────────────
+    @Column(name = "manual_rca_summary", columnDefinition = "TEXT")
+    private String manualRcaSummary;
+
+    @Column(name = "manual_root_cause", columnDefinition = "TEXT")
+    private String manualRootCause;
+
+    @Column(name = "manual_impact_analysis", columnDefinition = "TEXT")
+    private String manualImpactAnalysis;
+
+    @Column(name = "manual_suggested_fix", columnDefinition = "TEXT")
+    private String manualSuggestedFix;
+
+    @Column(name = "manual_prevention", columnDefinition = "TEXT")
+    private String manualPrevention;
+
+    @Column(name = "manual_triaged_at")
+    private LocalDateTime manualTriagedAt;
+
     // Removed embedding field: requires hibernate-vector to map float[] to pgvector 'vector'
 
     // ─── Timestamps ──────────────────────────────────────────────────────────

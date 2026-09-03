@@ -120,17 +120,46 @@ class IncidentServiceTest {
     }
 
     @Test
-    void manualDisposition() {
+    void manualDisposition_AwaitingTriage_SingleTriage() {
+        incident.setStatus("AWAITING_TRIAGE");
+        incident.setConfidence(null);
         when(incidentRepository.findByIncidentId(incidentId)).thenReturn(Optional.of(incident));
         
         ManualDispositionRequest request = new ManualDispositionRequest();
         request.setRootCause("Test Root Cause");
+        request.setRcaSummary("Test Summary");
         
         IncidentDTO result = incidentService.manualDisposition(incidentId, request);
         
         assertEquals("RCA_COMPLETE", result.getStatus());
         assertEquals("Test Root Cause", result.getRootCause());
-        assertEquals(1.0, result.getConfidence());
+        assertEquals("Test Summary", result.getRcaSummary());
+        assertNull(result.getConfidence());
+        assertNull(result.getManualRootCause());
+        verify(incidentRepository).save(incident);
+    }
+
+    @Test
+    void manualDisposition_WithExistingAi_DualTriage() {
+        incident.setStatus("RCA_COMPLETE");
+        incident.setRootCause("AI Root Cause");
+        incident.setRcaSummary("AI Summary");
+        incident.setConfidence(0.88);
+        when(incidentRepository.findByIncidentId(incidentId)).thenReturn(Optional.of(incident));
+        
+        ManualDispositionRequest request = new ManualDispositionRequest();
+        request.setRootCause("Human Expert Root Cause");
+        request.setRcaSummary("Human Expert Summary");
+        
+        IncidentDTO result = incidentService.manualDisposition(incidentId, request);
+        
+        assertEquals("RCA_COMPLETE", result.getStatus());
+        assertEquals("AI Root Cause", result.getRootCause());
+        assertEquals("AI Summary", result.getRcaSummary());
+        assertEquals(0.88, result.getConfidence());
+        assertEquals("Human Expert Root Cause", result.getManualRootCause());
+        assertEquals("Human Expert Summary", result.getManualRcaSummary());
+        assertNotNull(result.getManualTriagedAt());
         verify(incidentRepository).save(incident);
     }
 

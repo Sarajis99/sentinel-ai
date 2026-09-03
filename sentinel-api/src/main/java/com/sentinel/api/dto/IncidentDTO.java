@@ -34,6 +34,14 @@ public class IncidentDTO {
     private String prevention;
     private Double confidence;
 
+    // Manual Triage fields (Dual-Triage support)
+    private String manualRcaSummary;
+    private String manualRootCause;
+    private String manualImpactAnalysis;
+    private String manualSuggestedFix;
+    private String manualPrevention;
+    private LocalDateTime manualTriagedAt;
+
     // Timestamps
     private LocalDateTime detectedAt;
     private LocalDateTime analyzedAt;

@@ -129,23 +129,37 @@ public class IncidentService {
         Incident incident = incidentRepository.findByIncidentId(incidentId)
                 .orElseThrow(() -> new RuntimeException("Incident not found: " + incidentId));
 
-        incident.setRootCause(request.getRootCause());
-        incident.setRcaSummary(request.getRcaSummary());
-        incident.setImpactAnalysis(request.getImpactAnalysis());
-        incident.setSuggestedFix(request.getSuggestedFix());
-        incident.setPrevention(request.getPrevention());
-        incident.setConfidence(null); // Manual triage has no AI confidence
-        incident.setAnalyzedAt(LocalDateTime.now());
-        
+        // If AI analysis is already present (confidence != null), preserve AI analysis
+        // and store human manual triage in manual* fields to support dual-analysis tabs.
+        if (incident.getConfidence() != null) {
+            incident.setManualRootCause(request.getRootCause());
+            incident.setManualRcaSummary(request.getRcaSummary());
+            incident.setManualImpactAnalysis(request.getImpactAnalysis());
+            incident.setManualSuggestedFix(request.getSuggestedFix());
+            incident.setManualPrevention(request.getPrevention());
+            incident.setManualTriagedAt(LocalDateTime.now());
+            log.info("🧠 Dual-triage: Manual analysis added alongside existing AI analysis for incident {}", incidentId);
+        } else {
+            // AWAITING_TRIAGE (or manual replacement where AI analysis was unavailable):
+            // Populates primary RCA fields with confidence = null, showing single Manual Analysis tab.
+            incident.setRootCause(request.getRootCause());
+            incident.setRcaSummary(request.getRcaSummary());
+            incident.setImpactAnalysis(request.getImpactAnalysis());
+            incident.setSuggestedFix(request.getSuggestedFix());
+            incident.setPrevention(request.getPrevention());
+            incident.setConfidence(null);
+            incident.setAnalyzedAt(LocalDateTime.now());
+            log.info("🧠 Single-triage: Manual analysis applied to incident {}", incidentId);
+        }
+
         // Only progress to RCA_COMPLETE if we are in an early stage.
-        // If the analyst is editing an existing manual triage, leave the status alone.
+        // If the analyst is editing an existing manual triage on an accepted/in-progress incident, leave the status alone.
         String currentStatus = incident.getStatus();
         if ("NEW".equals(currentStatus) || "ASSESSING".equals(currentStatus) || "AWAITING_TRIAGE".equals(currentStatus)) {
             incident.setStatus("RCA_COMPLETE");
         }
 
         incidentRepository.save(incident);
-        log.info("✍️ Manual disposition applied to incident {}", incidentId);
         return toDTO(incident);
     }
 
@@ -266,6 +280,12 @@ public class IncidentService {
                 .suggestedFix(entity.getSuggestedFix())
                 .prevention(entity.getPrevention())
                 .confidence(entity.getConfidence())
+                .manualRcaSummary(entity.getManualRcaSummary())
+                .manualRootCause(entity.getManualRootCause())
+                .manualImpactAnalysis(entity.getManualImpactAnalysis())
+                .manualSuggestedFix(entity.getManualSuggestedFix())
+                .manualPrevention(entity.getManualPrevention())
+                .manualTriagedAt(entity.getManualTriagedAt())
                 .detectedAt(entity.getDetectedAt())
                 .analyzedAt(entity.getAnalyzedAt())
                 .resolvedAt(entity.getResolvedAt())

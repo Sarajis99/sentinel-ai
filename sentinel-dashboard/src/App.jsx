@@ -162,6 +162,18 @@ export default function App() {
   }, [selected]);
 
   useEffect(() => {
+    if (!selected) return;
+    const hasAi = selected.confidence != null || selected.status === 'AWAITING_TRIAGE';
+    const hasManual = selected.manualRootCause || (selected.confidence == null && ['RCA_COMPLETE', 'IN_PROGRESS', 'RESOLVED', 'CLOSED'].includes(selected.status));
+
+    if (activeTab === 'analysis' && !hasAi && hasManual) {
+      setActiveTab('manual');
+    } else if (activeTab === 'manual' && !hasManual && hasAi) {
+      setActiveTab('analysis');
+    }
+  }, [selected, activeTab]);
+
+  useEffect(() => {
     if (booting || isIdle) return; // Halt polling when booting or in Eco-Mode to allow sentinel-api to sleep
 
     loadData();
@@ -192,13 +204,19 @@ export default function App() {
   }, [stats?.dailyTrend]);
 
   // ─── Manual Disposition ────────────────────────────────────────────────
-  const handleOpenNewModal = () => {
-    setModalForm({ rootCause: '', rcaSummary: '', impactAnalysis: '', suggestedFix: '', prevention: '' });
-    setShowModal(true);
-  };
-
-  const handleOpenEditModal = () => {
-    if (selected) {
+  const handleOpenManualModal = () => {
+    if (!selected) return;
+    if (selected.manualRootCause) {
+      // Editing existing manual triage
+      setModalForm({
+        rootCause: selected.manualRootCause,
+        rcaSummary: selected.manualRcaSummary || '',
+        impactAnalysis: selected.manualImpactAnalysis || '',
+        suggestedFix: selected.manualSuggestedFix || '',
+        prevention: selected.manualPrevention || ''
+      });
+    } else if (selected.confidence != null) {
+      // Pre-fill with AI analysis draft so engineer can review and refine
       setModalForm({
         rootCause: selected.rootCause || '',
         rcaSummary: selected.rcaSummary || '',
@@ -206,9 +224,20 @@ export default function App() {
         suggestedFix: selected.suggestedFix || '',
         prevention: selected.prevention || ''
       });
-      setShowModal(true);
+    } else {
+      setModalForm({
+        rootCause: selected.rootCause || '',
+        rcaSummary: selected.rcaSummary || '',
+        impactAnalysis: selected.impactAnalysis || '',
+        suggestedFix: selected.suggestedFix || '',
+        prevention: selected.prevention || ''
+      });
     }
+    setShowModal(true);
   };
+
+  const handleOpenNewModal = handleOpenManualModal;
+  const handleOpenEditModal = handleOpenManualModal;
 
   // ─── Action Handlers ──────────────────────────────────────────────────
   const handleSimulate = async () => {
@@ -356,9 +385,10 @@ export default function App() {
     }
     try {
       const updated = await api.manualDisposition(selected.incidentId, modalForm);
-      addToast('Manual disposition applied successfully', 'success');
+      addToast('Manual triage applied successfully', 'success');
       setSelected(updated);
       setShowModal(false);
+      setActiveTab('manual');
       setModalForm({ rootCause: '', rcaSummary: '', impactAnalysis: '', suggestedFix: '', prevention: '' });
       loadData();
     } catch (err) { addToast(err.message, 'error'); }
@@ -697,7 +727,7 @@ export default function App() {
                         '🔄 Retry AI Analysis'
                       )}
                     </button>
-                    <button className="btn btn-warning" onClick={handleOpenNewModal}>
+                    <button className="btn btn-warning" onClick={handleOpenManualModal}>
                       <ShieldAlert size={14} /> Manual Triage
                     </button>
                     <button className="btn" onClick={() => handleDismiss(selected.incidentId)}>
@@ -707,6 +737,9 @@ export default function App() {
                 )}
                 {selected.status === 'RCA_COMPLETE' && (
                   <>
+                    <button className="btn btn-warning" onClick={handleOpenManualModal}>
+                      <ShieldAlert size={14} /> {selected.manualRootCause ? 'Edit Manual Triage' : 'Manual Triage'}
+                    </button>
                     <button className="btn btn-success" onClick={() => handleAccept(selected.incidentId)}>
                       <CheckCircle2 size={14} /> Accept & Work
                     </button>
@@ -717,6 +750,9 @@ export default function App() {
                 )}
                 {selected.status === 'IN_PROGRESS' && (
                   <>
+                    <button className="btn btn-warning" onClick={handleOpenManualModal}>
+                      <ShieldAlert size={14} /> {selected.manualRootCause ? 'Edit Manual Triage' : 'Manual Triage'}
+                    </button>
                     <button className="btn btn-success" onClick={() => handleResolve(selected.incidentId)}>
                       <CheckCircle2 size={14} /> Resolve
                     </button>
@@ -726,13 +762,18 @@ export default function App() {
                   </>
                 )}
                 {selected.status === 'RESOLVED' && (
-                  <button className="btn btn-primary" onClick={() => handleClose(selected.incidentId)}>
-                    🔒 Close Incident
-                  </button>
+                  <>
+                    <button className="btn btn-warning" onClick={handleOpenManualModal}>
+                      <ShieldAlert size={14} /> {selected.manualRootCause ? 'Edit Manual Triage' : 'Manual Triage'}
+                    </button>
+                    <button className="btn btn-primary" onClick={() => handleClose(selected.incidentId)}>
+                      🔒 Close Incident
+                    </button>
+                  </>
                 )}
-                {selected.confidence == null && selected.status !== 'CLOSED' && selected.status !== 'AWAITING_TRIAGE' && (
-                  <button className="btn btn-warning" onClick={handleOpenEditModal}>
-                    <Edit3 size={14} /> Edit Triage
+                {selected.status === 'CLOSED' && (
+                  <button className="btn btn-warning" onClick={handleOpenManualModal}>
+                    <ShieldAlert size={14} /> {selected.manualRootCause ? 'Edit Manual Triage' : 'Manual Triage'}
                   </button>
                 )}
               </div>
@@ -743,9 +784,21 @@ export default function App() {
               <button className={`tab ${activeTab === 'details' ? 'active' : ''}`} onClick={() => setActiveTab('details')}>
                 Incident Details
               </button>
-              <button className={`tab ${activeTab === 'analysis' ? 'active' : ''}`} onClick={() => setActiveTab('analysis')}>
-                {selected.confidence == null && ['RCA_COMPLETE', 'IN_PROGRESS', 'RESOLVED', 'CLOSED'].includes(selected.status) ? '🧠 Manual Analysis' : '✨ AI Analysis'}
-              </button>
+
+              {/* Show AI Analysis tab if incident was analyzed by AI, OR if currently awaiting triage */}
+              {(selected.confidence != null || selected.status === 'AWAITING_TRIAGE') && (
+                <button className={`tab ${activeTab === 'analysis' ? 'active' : ''}`} onClick={() => setActiveTab('analysis')}>
+                  ✨ AI Analysis
+                </button>
+              )}
+
+              {/* Show Manual Analysis tab if manual analysis was performed */}
+              {(selected.manualRootCause || (selected.confidence == null && ['RCA_COMPLETE', 'IN_PROGRESS', 'RESOLVED', 'CLOSED'].includes(selected.status))) && (
+                <button className={`tab ${activeTab === 'manual' ? 'active' : ''}`} onClick={() => setActiveTab('manual')}>
+                  🧠 Manual Analysis
+                </button>
+              )}
+
               <button className={`tab ${activeTab === 'raw' ? 'active' : ''}`} onClick={() => setActiveTab('raw')}>
                 Raw Logs
               </button>
@@ -944,42 +997,90 @@ export default function App() {
               )}
 
               {activeTab === 'analysis' && (
-                  <div className="rca-grid" style={{marginTop: '16px'}}>
-                    <div>
-                      <div className="rca-section__label">Root Cause</div>
-                      <div className="rca-section__text">{selected.rootCause || 'Not determined'}</div>
+                <div className="rca-grid" style={{marginTop: '16px'}}>
+                  {selected.status === 'AWAITING_TRIAGE' ? (
+                    <div style={{padding: '24px', textAlign: 'center', color: 'var(--text-secondary)'}}>
+                      ⚠️ AI analysis was unavailable for this incident. You can retry AI analysis or perform manual triage using the buttons above.
                     </div>
-                    <div>
-                      <div className="rca-section__label">Summary</div>
-                      <div className="rca-section__text">{selected.rcaSummary || 'No summary available'}</div>
-                    </div>
-                    <div>
-                      <div className="rca-section__label">Impact Analysis</div>
-                      <div className="rca-section__text">{selected.impactAnalysis || 'Not assessed'}</div>
-                    </div>
-                    <div>
-                      <div className="rca-section__label">Suggested Fix</div>
-                      <div className="rca-section__text">{selected.suggestedFix || 'No fix suggested'}</div>
-                    </div>
-                    <div>
-                      <div className="rca-section__label">Prevention</div>
-                      <div className="rca-section__text">{selected.prevention || 'No prevention steps'}</div>
-                    </div>
-                    {selected.confidence != null && (
+                  ) : (
+                    <>
                       <div>
-                        <div className="rca-section__label">AI Confidence</div>
-                        <div className="confidence-bar">
-                          <div
-                            className={`confidence-bar__fill ${(selected.confidence ?? 0) >= 0.7 ? 'confidence-high' : (selected.confidence ?? 0) >= 0.4 ? 'confidence-medium' : 'confidence-low'}`}
-                            style={{ width: `${(selected.confidence ?? 0) * 100}%` }}
-                          />
-                        </div>
-                        <div style={{fontSize: '0.7rem', color: 'var(--text-muted)', marginTop: '4px', fontWeight: 600}}>
-                          {((selected.confidence ?? 0) * 100).toFixed(0)}% CONFIDENCE
-                        </div>
+                        <div className="rca-section__label">Root Cause</div>
+                        <div className="rca-section__text">{selected.rootCause || 'Not determined'}</div>
                       </div>
-                    )}
+                      <div>
+                        <div className="rca-section__label">Summary</div>
+                        <div className="rca-section__text">{selected.rcaSummary || 'No summary available'}</div>
+                      </div>
+                      <div>
+                        <div className="rca-section__label">Impact Analysis</div>
+                        <div className="rca-section__text">{selected.impactAnalysis || 'Not assessed'}</div>
+                      </div>
+                      <div>
+                        <div className="rca-section__label">Suggested Fix</div>
+                        <div className="rca-section__text">{selected.suggestedFix || 'No fix suggested'}</div>
+                      </div>
+                      <div>
+                        <div className="rca-section__label">Prevention</div>
+                        <div className="rca-section__text">{selected.prevention || 'No prevention steps'}</div>
+                      </div>
+                      {selected.confidence != null && (
+                        <div>
+                          <div className="rca-section__label">AI Confidence</div>
+                          <div className="confidence-bar">
+                            <div
+                              className={`confidence-bar__fill ${(selected.confidence ?? 0) >= 0.7 ? 'confidence-high' : (selected.confidence ?? 0) >= 0.4 ? 'confidence-medium' : 'confidence-low'}`}
+                              style={{ width: `${(selected.confidence ?? 0) * 100}%` }}
+                            />
+                          </div>
+                          <div style={{fontSize: '0.7rem', color: 'var(--text-muted)', marginTop: '4px', fontWeight: 600}}>
+                            {((selected.confidence ?? 0) * 100).toFixed(0)}% CONFIDENCE
+                          </div>
+                        </div>
+                      )}
+                    </>
+                  )}
+                </div>
+              )}
+
+              {activeTab === 'manual' && (
+                <div className="rca-grid" style={{marginTop: '16px'}}>
+                  <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px', paddingBottom: '8px', borderBottom: '1px solid var(--border-subtle)'}}>
+                    <span className="badge badge-rca-complete" style={{fontSize: '0.8rem', padding: '4px 10px'}}>
+                      🧠 Human Expert Analysis
+                    </span>
+                    <div style={{display: 'flex', alignItems: 'center', gap: '12px'}}>
+                      {selected.manualTriagedAt && (
+                        <span style={{fontSize: '0.75rem', color: 'var(--text-muted)'}}>
+                          Triaged: {formatDate(selected.manualTriagedAt)}
+                        </span>
+                      )}
+                      <button className="btn" onClick={handleOpenManualModal} style={{padding: '3px 8px', fontSize: '0.75rem'}}>
+                        <Edit3 size={12} /> Edit
+                      </button>
+                    </div>
                   </div>
+                  <div>
+                    <div className="rca-section__label">Root Cause</div>
+                    <div className="rca-section__text">{selected.manualRootCause || selected.rootCause || 'Not determined'}</div>
+                  </div>
+                  <div>
+                    <div className="rca-section__label">Summary</div>
+                    <div className="rca-section__text">{selected.manualRcaSummary || selected.rcaSummary || 'No summary available'}</div>
+                  </div>
+                  <div>
+                    <div className="rca-section__label">Impact Analysis</div>
+                    <div className="rca-section__text">{selected.manualImpactAnalysis || selected.impactAnalysis || 'Not assessed'}</div>
+                  </div>
+                  <div>
+                    <div className="rca-section__label">Suggested Fix</div>
+                    <div className="rca-section__text">{selected.manualSuggestedFix || selected.suggestedFix || 'No fix suggested'}</div>
+                  </div>
+                  <div>
+                    <div className="rca-section__label">Prevention</div>
+                    <div className="rca-section__text">{selected.manualPrevention || selected.prevention || 'No prevention steps'}</div>
+                  </div>
+                </div>
               )}
 
               {activeTab === 'raw' && (
