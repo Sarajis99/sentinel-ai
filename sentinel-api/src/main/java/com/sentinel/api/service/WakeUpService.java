@@ -9,8 +9,8 @@ import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.time.Duration;
-import java.util.HashMap;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ExecutorService;
@@ -18,20 +18,13 @@ import java.util.concurrent.ExecutorService;
 /**
  * WakeUpService — Wakes sleeping Render free-tier services.
  *
- * Design rationale:
- *   Render free-tier services sleep after 15 minutes of inactivity.
- *   When a request hits a sleeping service, Render's proxy accepts the TCP
- *   connection immediately (within ~1s) and holds it open while the container
- *   boots (2-3 minutes). The key insight is: Render starts booting the moment
- *   it accepts the connection, regardless of whether we wait for the response.
+ * CRITICAL DESIGN: Render rate-limits sleeping services (HTTP 429) if you
+ * send too many requests. We must send exactly ONE request per service and
+ * hold the connection open patiently until the service boots (~3 minutes).
  *
- *   We use a "fire-and-forget" pattern:
- *   1. Send the HTTP request with a long enough timeout for Render's proxy
- *      to accept the TCP connection (~10s covers cold proxy startup).
- *   2. Return "STARTING" to the caller immediately (within ~2s).
- *   3. The background thread keeps the connection open for up to 4 minutes,
- *      ensuring Render completes the boot. The thread runs on a dedicated
- *      executor so it doesn't exhaust the ForkJoinPool.
+ * This service tracks in-flight wake-up attempts. If a wake-up is already
+ * in progress for a service, subsequent calls just check the status without
+ * sending additional HTTP requests.
  */
 @Slf4j
 @Service
@@ -46,48 +39,59 @@ public class WakeUpService {
     @Value("${RCA_URL:http://localhost:8083}")
     private String rcaUrl;
 
-    // Dedicated thread pool so long-running wake-up connections don't starve
-    // the shared ForkJoinPool used by CompletableFuture.supplyAsync().
+    // Dedicated thread pool — 3 threads, one per service
     private final ExecutorService wakeUpExecutor = Executors.newFixedThreadPool(3);
 
     private final HttpClient httpClient = HttpClient.newBuilder()
-            .connectTimeout(Duration.ofSeconds(10)) // Render proxy accepts within ~1-2s
+            .connectTimeout(Duration.ofSeconds(10))
             .build();
 
+    // Track in-flight wake-up futures so we don't spam Render
+    private final ConcurrentHashMap<String, CompletableFuture<String>> inFlightWakeUps = new ConcurrentHashMap<>();
+
+    // Track final statuses
+    private final ConcurrentHashMap<String, String> serviceStatuses = new ConcurrentHashMap<>();
+
     /**
-     * Pings all 3 downstream services concurrently.
-     * Returns immediately with current status (UP or STARTING).
-     * Background threads keep connections alive so Render completes the boot.
+     * Returns current status of all 3 services.
+     * On first call, fires ONE wake-up request per service.
+     * On subsequent calls, just checks if those requests completed.
+     * Never sends duplicate requests while one is in-flight.
      */
     public Map<String, String> wakeAllServices() {
-        CompletableFuture<String> ingestionFuture = pingService(ingestionUrl, "sentinel-ingestion");
-        CompletableFuture<String> detectorFuture  = pingService(detectorUrl,  "sentinel-detector");
-        CompletableFuture<String> rcaFuture       = pingService(rcaUrl,       "sentinel-rca");
+        ensureWakeUpStarted("sentinel-ingestion", ingestionUrl);
+        ensureWakeUpStarted("sentinel-detector", detectorUrl);
+        ensureWakeUpStarted("sentinel-rca", rcaUrl);
 
-        // Give up to 2 seconds for already-awake services to respond instantly.
-        // Sleeping services will return "STARTING" and continue booting in background.
-        Map<String, String> statuses = new HashMap<>();
-        statuses.put("sentinel-ingestion", resolveQuickly(ingestionFuture));
-        statuses.put("sentinel-detector",  resolveQuickly(detectorFuture));
-        statuses.put("sentinel-rca",       resolveQuickly(rcaFuture));
-
-        return statuses;
+        return Map.of(
+                "sentinel-ingestion", serviceStatuses.getOrDefault("sentinel-ingestion", "STARTING"),
+                "sentinel-detector", serviceStatuses.getOrDefault("sentinel-detector", "STARTING"),
+                "sentinel-rca", serviceStatuses.getOrDefault("sentinel-rca", "STARTING")
+        );
     }
 
-    private String resolveQuickly(CompletableFuture<String> future) {
-        try {
-            return future.get(2, java.util.concurrent.TimeUnit.SECONDS);
-        } catch (Exception e) {
-            return "STARTING";
+    /**
+     * Starts a wake-up request ONLY if one isn't already in progress.
+     */
+    private void ensureWakeUpStarted(String serviceName, String baseUrl) {
+        // If already UP, nothing to do
+        if ("UP".equals(serviceStatuses.get(serviceName))) {
+            return;
         }
-    }
 
-    private CompletableFuture<String> pingService(String baseUrl, String serviceName) {
-        return CompletableFuture.supplyAsync(() -> {
+        // If a request is already in-flight, don't send another one
+        CompletableFuture<String> existing = inFlightWakeUps.get(serviceName);
+        if (existing != null && !existing.isDone()) {
+            return; // Patient — just wait for the existing request
+        }
+
+        // Fire exactly ONE request and track it
+        CompletableFuture<String> future = CompletableFuture.supplyAsync(() -> {
+            log.info("🔔 Sending single wake-up ping to {} ...", serviceName);
             try {
                 HttpRequest request = HttpRequest.newBuilder()
                         .uri(URI.create(baseUrl + "/ping"))
-                        .timeout(Duration.ofMinutes(4)) // Patient enough for full Render boot
+                        .timeout(Duration.ofMinutes(4)) // Patient: wait for full Render boot
                         .GET()
                         .build();
 
@@ -95,16 +99,22 @@ public class WakeUpService {
                         HttpResponse.BodyHandlers.ofString());
 
                 if (response.statusCode() == 200) {
-                    log.info("✅ {} is UP", serviceName);
+                    log.info("✅ {} is UP (boot complete)", serviceName);
+                    serviceStatuses.put(serviceName, "UP");
                     return "UP";
                 } else {
-                    log.warn("⚠️ {} returned status {}", serviceName, response.statusCode());
+                    log.warn("⚠️ {} returned status {} — will retry on next poll",
+                            serviceName, response.statusCode());
+                    serviceStatuses.put(serviceName, "STARTING");
                     return "STARTING";
                 }
             } catch (Exception e) {
-                log.debug("⏳ {} is still booting: {}", serviceName, e.getMessage());
+                log.debug("⏳ {} wake-up request ended: {}", serviceName, e.getMessage());
+                serviceStatuses.put(serviceName, "STARTING");
                 return "STARTING";
             }
-        }, wakeUpExecutor); // Use dedicated executor, not ForkJoinPool
+        }, wakeUpExecutor);
+
+        inFlightWakeUps.put(serviceName, future);
     }
 }
