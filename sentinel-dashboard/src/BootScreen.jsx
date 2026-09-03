@@ -32,8 +32,8 @@ export default function BootScreen({ onReady }) {
 
         const mapKey = (key) => {
           const k = key.toLowerCase();
-          if (k.includes('log')) return 'Log Ingestion';
-          if (k.includes('anomaly')) return 'Anomaly Detector';
+          if (k.includes('ingestion')) return 'Log Ingestion';
+          if (k.includes('detector')) return 'Anomaly Detector';
           if (k.includes('rca')) return 'RCA Engine';
           return key;
         };
