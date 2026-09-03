@@ -57,7 +57,7 @@ class OpenRouterClientTest {
                 "  \"choices\": [\n" +
                 "    {\n" +
                 "      \"message\": {\n" +
-                "        \"content\": \"{\\\"rootCause\\\":\\\"DB_TIMEOUT\\\",\\\"title\\\":\\\"Test\\\",\\\"rcaSummary\\\":\\\"Sum\\\",\\\"confidence\\\":0.9}\"\n" +
+                "        \"content\": \"{\\\"rootCause\\\":\\\"DB_TIMEOUT\\\",\\\"title\\\":\\\"Test\\\",\\\"rcaSummary\\\":\\\"Sum\\\",\\\"suggestedFix\\\":\\\"Restart DB pool\\\",\\\"impactAnalysis\\\":\\\"Downstream latency\\\",\\\"confidence\\\":0.9}\"\n" +
                 "      }\n" +
                 "    }\n" +
                 "  ]\n" +
@@ -101,7 +101,7 @@ class OpenRouterClientTest {
                 "  \"choices\": [\n" +
                 "    {\n" +
                 "      \"message\": {\n" +
-                "        \"content\": \"Here is your SRE report:\\n```json\\n{\\n  \\\"root_cause\\\": \\\"MEMORY_LEAK\\\",\\n  \\\"rca_summary\\\": \\\"Heap exhausted in pod\\\",\\n  \\\"suggested_fix\\\": \\\"Increase memory limits\\\",\\n  \\\"confidence\\\": 0.88\\n}\\n```\\nHope this helps!\"\n" +
+                "        \"content\": \"Here is your SRE report:\\n```json\\n{\\n  \\\"root_cause\\\": \\\"MEMORY_LEAK\\\",\\n  \\\"rca_summary\\\": \\\"Heap exhausted in pod\\\",\\n  \\\"suggested_fix\\\": \\\"Increase memory limits\\\",\\n  \\\"impact_analysis\\\": \\\"Pod OOMKilled\\\",\\n  \\\"confidence\\\": 0.88\\n}\\n```\\nHope this helps!\"\n" +
                 "      }\n" +
                 "    }\n" +
                 "  ]\n" +
@@ -120,8 +120,7 @@ class OpenRouterClientTest {
         assertEquals("MEMORY_LEAK", response.getRootCause());
         assertEquals("Heap exhausted in pod", response.getRcaSummary());
         assertEquals("Increase memory limits", response.getSuggestedFix());
-        // Auto-synthesized non-critical fields so UI never has blank cards
-        assertNotNull(response.getImpactAnalysis());
+        assertEquals("Pod OOMKilled", response.getImpactAnalysis());
         assertNotNull(response.getPrevention());
         assertNotNull(response.getTitle());
         assertEquals(0.88, response.getConfidence());
@@ -143,7 +142,7 @@ class OpenRouterClientTest {
                 "  \"choices\": [\n" +
                 "    {\n" +
                 "      \"message\": {\n" +
-                "        \"content\": \"{\\\"rootCause\\\":\\\"CONFIG_ERROR\\\",\\\"rcaSummary\\\":\\\"Bad env variable\\\",\\\"confidence\\\":0.9}\"\n" +
+                "        \"content\": \"{\\\"rootCause\\\":\\\"CONFIG_ERROR\\\",\\\"rcaSummary\\\":\\\"Bad env variable\\\",\\\"suggestedFix\\\":\\\"Fix env\\\",\\\"impactAnalysis\\\":\\\"App crash\\\",\\\"confidence\\\":0.9}\"\n" +
                 "      }\n" +
                 "    }\n" +
                 "  ]\n" +

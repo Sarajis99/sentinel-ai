@@ -75,13 +75,20 @@ public class OpenRouterClient implements LLMClient {
     public void init() {
         if (!isAvailable()) return;
         
-        // 1. Curated cross-provider fallback models (NVIDIA, MiniMax, Google)
-        fallbackModels.add("nvidia/nemotron-3.5-lightning:free");
-        fallbackModels.add("minimax/minimax-m3:free");
-        fallbackModels.add("google/gemma-4-26b-a4b-it:free");
-        fallbackModels.add("google/gemma-4-31b-it:free");
+        // Curated cross-provider fallback models (MiniMax, Google, Liquid, NVIDIA)
+        List<String> curated = List.of(
+            "minimax/minimax-m3:free",
+            "google/gemma-4-26b-a4b-it:free",
+            "google/gemma-4-31b-it:free",
+            "liquid/lfm-2.5-2.6b:free",
+            "nvidia/nemotron-3.5-lightning:free"
+        );
+        for (String m : curated) {
+            if (!m.equals(defaultModel) && !fallbackModels.contains(m)) {
+                fallbackModels.add(m);
+            }
+        }
         
-        // 2. Fetch the dynamic list and append to the back
         fetchFreeModels();
     }
 
@@ -194,11 +201,12 @@ public class OpenRouterClient implements LLMClient {
     }
 
     private Map<String, Object> buildRequestBody(String prompt, String model, boolean requireStructuredJson) {
+        String fullUserPrompt = prompt + "\n\n" + getJsonSchemaInstruction();
         Map<String, Object> body = new HashMap<>();
         body.put("model", model);
         body.put("messages", List.of(
                 Map.of("role", "system", "content", getSystemPrompt()),
-                Map.of("role", "user", "content", prompt)
+                Map.of("role", "user", "content", fullUserPrompt)
         ));
         body.put("temperature", 0.2);
         body.put("max_tokens", 1500);
@@ -216,22 +224,39 @@ public class OpenRouterClient implements LLMClient {
                 Your job is to:
                 1. Identify the TRUE root cause (not just the symptom — dig deeper)
                 2. Assess the impact on users and downstream services
-                3. Provide a clear, actionable fix for the on-call engineer
+                3. Provide a clear, actionable fix for the on-call engineer based on the logs
                 4. Suggest how to prevent this in the future
                 
                 You MUST respond ONLY with a valid JSON object in this exact format. Every field is mandatory:
                 {
                   "rootCause": "Short category like DB_OUTAGE, MEMORY_LEAK, DOWNSTREAM_FAILURE, DEPLOYMENT_ISSUE, TRAFFIC_SPIKE, CONFIGURATION_ERROR, NETWORK_ISSUE",
                   "title": "Short incident title for the dashboard (max 80 chars)",
-                  "rcaSummary": "2-3 sentence plain English summary of what happened and why",
+                  "rcaSummary": "2-3 sentence plain English summary of what happened and why based on the logs",
                   "rootCauseDetail": "Detailed technical explanation with evidence from the logs",
                   "impactAnalysis": "Which users and services are affected, and how severely",
-                  "suggestedFix": "Step by step fix for the on-call engineer",
+                  "suggestedFix": "Step by step fix for the on-call engineer based on these logs",
                   "prevention": "How to prevent this from happening again",
                   "confidence": 0.85
                 }
                 
                 Do not include any text outside the JSON object. Be specific and reference actual log messages as evidence.
+                """;
+    }
+
+    private String getJsonSchemaInstruction() {
+        return """
+                You MUST respond ONLY with a valid JSON object in this exact format. Every field is mandatory:
+                {
+                  "rootCause": "Short category like DB_OUTAGE, MEMORY_LEAK, DOWNSTREAM_FAILURE, DEPLOYMENT_ISSUE, TRAFFIC_SPIKE, CONFIGURATION_ERROR, NETWORK_ISSUE",
+                  "title": "Short incident title for the dashboard (max 80 chars)",
+                  "rcaSummary": "2-3 sentence plain English summary of what happened and why based on the logs",
+                  "rootCauseDetail": "Detailed technical explanation with evidence from the logs",
+                  "impactAnalysis": "Which users and services are affected, and how severely",
+                  "suggestedFix": "Step by step fix for the on-call engineer based on these logs",
+                  "prevention": "How to prevent this from happening again",
+                  "confidence": 0.85
+                }
+                Do not include any text, markdown backticks, or preamble outside the JSON object.
                 """;
     }
 
@@ -262,27 +287,23 @@ public class OpenRouterClient implements LLMClient {
             String prevention = getField(rcaJson, "prevention", "prevention_steps", "preventive_measures");
             String title = getField(rcaJson, "title", "incident_title");
 
-            // Quality gate: rootCause and rcaSummary are mandatory
+            // Quality gate: require authentic AI generation for all core SRE fields!
+            // No fake generic advice — if the model failed to provide actual fix, impact, or cause, reject it!
             boolean isValid = rootCause != null && !rootCause.isBlank() && !"UNKNOWN".equalsIgnoreCase(rootCause)
-                    && rcaSummary != null && !rcaSummary.isBlank();
+                    && rcaSummary != null && !rcaSummary.isBlank()
+                    && suggestedFix != null && !suggestedFix.isBlank()
+                    && impactAnalysis != null && !impactAnalysis.isBlank();
 
             if (!isValid) {
-                log.warn("❌ Response missing mandatory rootCause or rcaSummary (rootCause={}, summary={})", rootCause, rcaSummary);
-                return buildFallbackResponse("Missing mandatory rootCause or rcaSummary");
+                log.warn("❌ Model failed quality gate: missing authentic rootCause, summary, suggestedFix, or impactAnalysis. Falling back...");
+                return buildFallbackResponse("Missing required authentic RCA fields from model");
             }
 
-            // Fallback synthesizers for non-critical fields so UI never has blank cards
-            if (impactAnalysis == null || impactAnalysis.isBlank()) {
-                impactAnalysis = "Service performance degraded during anomaly window; client requests experienced elevated latency or error bursts.";
-            }
-            if (suggestedFix == null || suggestedFix.isBlank()) {
-                suggestedFix = "Inspect recent pod deployments, verify database connection pool limits, and restart affected service instances.";
-            }
-            if (prevention == null || prevention.isBlank()) {
-                prevention = "Implement automated circuit breakers and refine Prometheus/Kafka health alerting to isolate downstream degradation.";
-            }
             if (title == null || title.isBlank()) {
                 title = rootCause + " Incident detected";
+            }
+            if (prevention == null || prevention.isBlank()) {
+                prevention = "Review alert thresholds and telemetry logs for " + rootCause;
             }
 
             double confidence = 0.85;
@@ -324,7 +345,7 @@ public class OpenRouterClient implements LLMClient {
         if (firstBrace != -1 && lastBrace > firstBrace) {
             return text.substring(firstBrace, lastBrace + 1);
         }
-        return text;
+        return null;
     }
 
     private RCAResponse buildFallbackResponse(String reason) {
