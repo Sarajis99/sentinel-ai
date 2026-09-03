@@ -17,6 +17,20 @@ jest.mock('./api', () => ({
   }
 }));
 
+// Mock BootScreen so App unit tests test the main dashboard
+jest.mock('./BootScreen', () => {
+  const React = require('react');
+  return {
+    __esModule: true,
+    default: ({ onReady }) => {
+      React.useEffect(() => {
+        if (onReady) onReady();
+      }, [onReady]);
+      return null;
+    }
+  };
+});
+
 // Mock recharts to avoid rendering issues in JSDOM
 jest.mock('recharts', () => {
   const Original = jest.requireActual('recharts');

@@ -31,6 +31,7 @@ import {
 import './index.css';
 import { api, pingAPI } from './api';
 import BootScreen from './BootScreen';
+import { useSessionHeartbeat } from './hooks/useSessionHeartbeat';
 
 const POLL_INTERVAL = 10000;
 
@@ -73,6 +74,12 @@ function timeAgo(dateStr) {
 export default function App() {
   const [currentView, setCurrentView] = useState('dashboard');
   const [booting, setBooting] = useState(true);
+
+  // ─── Session Heartbeat & Eco-Mode Guard ────────────────────────────────
+  const { isIdle, resumeSession } = useSessionHeartbeat({
+    enabled: !booting,
+    onResume: () => setBooting(true),
+  });
   const [incidents, setIncidents] = useState([]);
   const [page, setPage] = useState(0);
   const [selected, setSelected] = useState(null);
@@ -1224,6 +1231,23 @@ export default function App() {
               <button className="btn" onClick={() => setShowModal(false)}>Cancel</button>
               <button className="btn btn-primary" onClick={handleManualDisposition}>Submit Report</button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* ─── Eco-Mode / Session Paused Modal ─────────────────────────── */}
+      {isIdle && (
+        <div className="idle-overlay">
+          <div className="idle-modal">
+            <div className="idle-icon">🍃</div>
+            <div className="idle-badge">Eco-Mode Active</div>
+            <h2 className="idle-title">Session Paused</h2>
+            <p className="idle-desc">
+              You have been inactive for over 20 minutes. Background microservices were allowed to sleep to conserve free-tier cloud resources.
+            </p>
+            <button className="idle-btn" onClick={resumeSession}>
+              <Play size={16} fill="currentColor" /> Resume Session
+            </button>
           </div>
         </div>
       )}
