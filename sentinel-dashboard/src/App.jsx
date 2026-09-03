@@ -147,12 +147,12 @@ export default function App() {
   }, [page]);
 
   useEffect(() => {
-    if (booting) return; // BootScreen handles the full wake-up lifecycle
+    if (booting || isIdle) return; // Halt polling when booting or in Eco-Mode to allow sentinel-api to sleep
 
     loadData();
     const interval = setInterval(loadData, POLL_INTERVAL);
     return () => clearInterval(interval);
-  }, [loadData, booting]);
+  }, [loadData, booting, isIdle]);
 
   const trendData = useMemo(() => {
     let raw = stats?.dailyTrend || [];
