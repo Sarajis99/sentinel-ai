@@ -20,6 +20,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.time.LocalDateTime;
 import java.util.Collections;
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -79,9 +80,8 @@ class RCAServiceTest {
         incident.setIncidentId(UUID.randomUUID());
 
         when(incidentRepository.existsByAnomalyId(anomalyId)).thenReturn(false);
-        when(contextGatherer.gatherRawLogs(anomaly)).thenReturn(Collections.emptyList());
+        when(contextGatherer.gatherRawLogs(anomaly)).thenReturn(List.of(new LogEvent()));
         when(contextGatherer.formatLogsForPrompt(any())).thenReturn("Logs");
-        when(objectMapper.writeValueAsString(any())).thenReturn("[]");
         when(incidentRepository.save(any(Incident.class))).thenReturn(incident);
         when(cacheService.buildCacheKey(any(), any(), any())).thenReturn("cacheKey");
         when(cacheService.get("cacheKey")).thenReturn(Optional.empty());
@@ -152,6 +152,8 @@ class RCAServiceTest {
         incident.setIncidentId(UUID.randomUUID());
 
         when(incidentRepository.existsByAnomalyId(anomalyId)).thenReturn(false);
+        when(contextGatherer.gatherRawLogs(anomaly)).thenReturn(List.of(new LogEvent()));
+        when(contextGatherer.formatLogsForPrompt(any())).thenReturn("Logs");
         when(incidentRepository.save(any(Incident.class))).thenReturn(incident);
         when(cacheService.buildCacheKey(any(), any(), any())).thenReturn("cacheKey");
         when(cacheService.get("cacheKey")).thenReturn(Optional.empty());

@@ -73,4 +73,16 @@ public class LLMCacheService {
             log.warn("Redis cache write failed: {}", e.getMessage());
         }
     }
+
+    /**
+     * Evict a cached RCA key from Redis.
+     */
+    public void evict(String cacheKey) {
+        try {
+            redisTemplate.delete(cacheKey);
+            log.info("🗑️ Evicted cache key: {}", cacheKey);
+        } catch (Exception e) {
+            log.warn("Redis cache evict failed: {}", e.getMessage());
+        }
+    }
 }

@@ -60,9 +60,9 @@ llm:
   openrouter:
     api-key: ${OPENROUTER_API_KEY:your-openrouter-key-here}
     base-url: https://openrouter.ai/api/v1
-    model: ${OPENROUTER_MODEL:google/gemma-4-26b-a4b-it:free}
-    timeout-seconds: 45
-    max-retries: 2
+    model: ${OPENROUTER_MODEL:nvidia/nemotron-3.5-lightning:free}
+    timeout-seconds: 10
+    max-retries: 1
     site-url: https://github.com/Sarajis99/sentinel-ai
     app-name: Sentinel AI
 

@@ -93,4 +93,74 @@ class OpenRouterClientTest {
         assertFalse(response.isParseSuccess());
         assertEquals("UNKNOWN", response.getRootCause());
     }
+
+    @Test
+    void testGenerateRCA_MarkdownFencesAndSnakeCaseAliases() {
+        // Simulates a looser free model returning markdown code block and snake_case fields
+        String jsonWithMarkdown = "{\n" +
+                "  \"choices\": [\n" +
+                "    {\n" +
+                "      \"message\": {\n" +
+                "        \"content\": \"Here is your SRE report:\\n```json\\n{\\n  \\\"root_cause\\\": \\\"MEMORY_LEAK\\\",\\n  \\\"rca_summary\\\": \\\"Heap exhausted in pod\\\",\\n  \\\"suggested_fix\\\": \\\"Increase memory limits\\\",\\n  \\\"confidence\\\": 0.88\\n}\\n```\\nHope this helps!\"\n" +
+                "      }\n" +
+                "    }\n" +
+                "  ]\n" +
+                "}";
+
+        when(redisTemplate.opsForValue()).thenReturn(valueOperations);
+        when(valueOperations.get(anyString())).thenReturn(null);
+
+        ResponseEntity<String> responseEntity = new ResponseEntity<>(jsonWithMarkdown, HttpStatus.OK);
+        when(restTemplate.exchange(anyString(), eq(HttpMethod.POST), any(HttpEntity.class), eq(String.class)))
+                .thenReturn(responseEntity);
+
+        RCAResponse response = openRouterClient.generateRCA("test prompt");
+
+        assertTrue(response.isParseSuccess());
+        assertEquals("MEMORY_LEAK", response.getRootCause());
+        assertEquals("Heap exhausted in pod", response.getRcaSummary());
+        assertEquals("Increase memory limits", response.getSuggestedFix());
+        // Auto-synthesized non-critical fields so UI never has blank cards
+        assertNotNull(response.getImpactAnalysis());
+        assertNotNull(response.getPrevention());
+        assertNotNull(response.getTitle());
+        assertEquals(0.88, response.getConfidence());
+    }
+
+    @Test
+    void testGenerateRCA_Adaptive400RetryWithoutStructuredOutputs() {
+        // First call fails with 400 structured-outputs error
+        org.springframework.web.client.HttpClientErrorException badRequestException =
+                org.springframework.web.client.HttpClientErrorException.create(
+                        HttpStatus.BAD_REQUEST,
+                        "Bad Request",
+                        org.springframework.http.HttpHeaders.EMPTY,
+                        "model: ling does not support feature: structured-outputs".getBytes(),
+                        java.nio.charset.StandardCharsets.UTF_8
+                );
+
+        String successJson = "{\n" +
+                "  \"choices\": [\n" +
+                "    {\n" +
+                "      \"message\": {\n" +
+                "        \"content\": \"{\\\"rootCause\\\":\\\"CONFIG_ERROR\\\",\\\"rcaSummary\\\":\\\"Bad env variable\\\",\\\"confidence\\\":0.9}\"\n" +
+                "      }\n" +
+                "    }\n" +
+                "  ]\n" +
+                "}";
+
+        when(redisTemplate.opsForValue()).thenReturn(valueOperations);
+        when(valueOperations.get(anyString())).thenReturn(null);
+
+        when(restTemplate.exchange(anyString(), eq(HttpMethod.POST), any(HttpEntity.class), eq(String.class)))
+                .thenThrow(badRequestException) // First call with structured=true fails with 400
+                .thenReturn(new ResponseEntity<>(successJson, HttpStatus.OK)); // Second call with structured=false succeeds
+
+        RCAResponse response = openRouterClient.generateRCA("test prompt");
+
+        assertTrue(response.isParseSuccess());
+        assertEquals("CONFIG_ERROR", response.getRootCause());
+        assertEquals("Bad env variable", response.getRcaSummary());
+        verify(restTemplate, times(2)).exchange(anyString(), eq(HttpMethod.POST), any(HttpEntity.class), eq(String.class));
+    }
 }

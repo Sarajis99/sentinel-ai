@@ -109,8 +109,10 @@ public class RCAService {
                     rcaResponse = callLLMWithFallback(prompt);
                 }
 
-                // Step 8: Cache the result
-                cacheResponse(cacheKey, rcaResponse);
+                // Step 8: Cache the result ONLY if valid
+                if (rcaResponse.isParseSuccess() && rcaResponse.getConfidence() > 0 && !"UNKNOWN".equalsIgnoreCase(rcaResponse.getRootCause())) {
+                    cacheResponse(cacheKey, rcaResponse);
+                }
             }
 
             // Phase 3: After AI completes
@@ -161,6 +163,10 @@ public class RCAService {
             .windowMinutes(record.getWindowMinutes())
             .build();
 
+        // Evict any existing cached failure for this anomaly so retry always runs fresh
+        String cacheKey = "rca:cache:" + record.getServiceName() + ":" + record.getAnomalyType() + ":" + record.getMetricName();
+        cacheService.evict(cacheKey);
+
         incident.setStatus("ASSESSING");
         incidentRepository.save(incident);
 
@@ -194,6 +200,11 @@ public class RCAService {
                 .map(cached -> {
                     try {
                         RCAResponse r = objectMapper.readValue(cached, RCAResponse.class);
+                        if (r != null && (r.getRootCause() == null || "UNKNOWN".equalsIgnoreCase(r.getRootCause()) || !r.isParseSuccess())) {
+                            log.warn("⚠️ Discarding cached UNKNOWN/failed RCA for key: {}", cacheKey);
+                            cacheService.evict(cacheKey);
+                            return null;
+                        }
                         log.info("⚡ Using cached RCA response");
                         return r;
                     } catch (Exception e) {
