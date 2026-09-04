@@ -67,3 +67,9 @@ logging:
     org.hibernate.SQL: WARN
 
 SETTINGS_ENCRYPTION_KEY: sentinel-ai-default-encryption-key-32b
+
+# API Security
+security:
+  enabled: ${SECURITY_ENABLED:true}
+  api-key: ${SENTINEL_API_KEY:sentinel-default-api-key}
+

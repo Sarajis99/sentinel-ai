@@ -46,6 +46,14 @@ class IncidentControllerTest {
     @MockBean
     private SimulationService simulationService;
 
+    @MockBean
+    private com.sentinel.api.security.RateLimiterService rateLimiterService;
+
+    @org.junit.jupiter.api.BeforeEach
+    void setupRateLimiter() {
+        Mockito.when(rateLimiterService.isAllowed(any(), any(), anyInt(), anyInt())).thenReturn(true);
+    }
+
     @Test
     void getIncidents() throws Exception {
         IncidentDTO incident = IncidentDTO.builder().incidentId(UUID.randomUUID()).build();

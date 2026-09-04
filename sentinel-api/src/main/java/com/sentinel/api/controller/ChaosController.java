@@ -1,7 +1,9 @@
 package com.sentinel.api.controller;
 
+import com.sentinel.api.security.RateLimiterService;
 import com.sentinel.api.service.ChaosService;
 import com.sentinel.common.dto.LogEventDTO;
+import jakarta.servlet.http.HttpServletRequest;
 import lombok.Data;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -19,10 +21,19 @@ import java.util.Map;
 public class ChaosController {
 
     private final ChaosService chaosService;
+    private final RateLimiterService rateLimiterService;
 
     @PostMapping("/inject")
-    public ResponseEntity<?> injectChaos(@RequestBody ChaosInjectionRequest request) {
+    public ResponseEntity<?> injectChaos(@RequestBody ChaosInjectionRequest request, HttpServletRequest servletRequest) {
         log.info("🧪 POST /chaos/inject — Injecting {} on {}", request.getScenario(), request.getTargetService());
+
+        String clientIp = servletRequest.getRemoteAddr();
+        if (!rateLimiterService.isAllowed("chaos-inject", clientIp, 10, 60)) {
+            return ResponseEntity.status(HttpStatus.TOO_MANY_REQUESTS).body(Map.of(
+                    "status", "error",
+                    "message", "Rate limit exceeded for chaos injection. Please wait 1 minute before injecting again."
+            ));
+        }
 
         try {
             List<LogEventDTO> events = chaosService.injectAnomaly(request.getScenario(), request.getTargetService());

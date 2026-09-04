@@ -1,0 +1,10 @@
+spring:
+  application:
+    name: sentinel-api-test
+
+cors:
+  allowed-origins: "http://localhost:5173,http://localhost:3000,http://localhost:8084"
+
+security:
+  enabled: false
+  api-key: sentinel-default-api-key

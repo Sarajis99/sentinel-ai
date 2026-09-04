@@ -12,6 +12,7 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestTemplate;
 
+import jakarta.annotation.PostConstruct;
 import javax.crypto.Cipher;
 import javax.crypto.spec.GCMParameterSpec;
 import javax.crypto.spec.SecretKeySpec;
@@ -34,6 +35,15 @@ public class SettingsService {
 
     @Value("${SETTINGS_ENCRYPTION_KEY:sentinel-ai-default-encryption-key-32b}")
     private String encryptionKeyStr;
+
+    @PostConstruct
+    public void validateEncryptionKey() {
+        if ("sentinel-ai-default-encryption-key-32b".equals(encryptionKeyStr)) {
+            log.warn("⚠️ SECURITY WARNING: Using default encryption key. Please configure SETTINGS_ENCRYPTION_KEY environment variable in Render for production.");
+        } else {
+            log.info("🔒 Custom cryptographic key initialized for settings encryption.");
+        }
+    }
 
     private static final String API_KEY_REDIS_KEY = "settings:openrouter-api-key";
     private static final String LOGS_PER_SECOND_KEY = "simulator:logs-per-second";

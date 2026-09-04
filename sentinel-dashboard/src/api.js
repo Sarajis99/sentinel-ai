@@ -1,9 +1,17 @@
 export const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8084/api/v1';
+export const getApiKey = () => {
+  return localStorage.getItem('sentinel_custom_api_key') || import.meta.env.VITE_SENTINEL_API_KEY || 'sentinel-default-api-key';
+};
 
 async function fetchJSON(url, options = {}) {
+  const headers = {
+    'Content-Type': 'application/json',
+    'X-Sentinel-Api-Key': getApiKey(),
+    ...(options.headers || {}),
+  };
   const res = await fetch(`${API_BASE}${url}`, {
-    headers: { 'Content-Type': 'application/json' },
     ...options,
+    headers,
   });
   if (!res.ok) {
     const error = await res.json().catch(() => ({ error: res.statusText }));

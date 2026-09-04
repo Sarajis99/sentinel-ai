@@ -3,6 +3,8 @@ package com.sentinel.api.controller;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.sentinel.api.service.ChaosService;
 import com.sentinel.common.dto.LogEventDTO;
+import com.sentinel.api.security.RateLimiterService;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -14,6 +16,8 @@ import org.springframework.test.web.servlet.MockMvc;
 import java.util.List;
 import java.util.Map;
 
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyInt;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -30,6 +34,14 @@ class ChaosControllerTest {
 
     @MockBean
     private ChaosService chaosService;
+
+    @MockBean
+    private RateLimiterService rateLimiterService;
+
+    @BeforeEach
+    void setupRateLimiter() {
+        Mockito.when(rateLimiterService.isAllowed(any(), any(), anyInt(), anyInt())).thenReturn(true);
+    }
 
     @Test
     void injectChaos_Success() throws Exception {

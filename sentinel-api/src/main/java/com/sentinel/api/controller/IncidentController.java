@@ -5,11 +5,14 @@ import com.sentinel.api.dto.DashboardStatsDTO;
 import com.sentinel.api.dto.IncidentCommentDTO;
 import com.sentinel.api.dto.IncidentDTO;
 import com.sentinel.api.dto.ManualDispositionRequest;
+import com.sentinel.api.security.RateLimiterService;
 import com.sentinel.api.service.IncidentService;
 import com.sentinel.api.service.SimulationService;
+import jakarta.servlet.http.HttpServletRequest;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
@@ -37,6 +40,7 @@ public class IncidentController {
 
     private final IncidentService incidentService;
     private final SimulationService simulationService;
+    private final RateLimiterService rateLimiterService;
 
     /**
      * GET /api/v1/incidents?page=0&size=20&severity=P0&status=OPEN&service=payment-service
@@ -129,8 +133,15 @@ public class IncidentController {
     }
 
     @PostMapping("/{id}/retry-analysis")
-    public ResponseEntity<Map<String, String>> retryAnalysis(@PathVariable("id") UUID incidentId) {
+    public ResponseEntity<Map<String, String>> retryAnalysis(@PathVariable("id") UUID incidentId, HttpServletRequest request) {
         log.info("POST /incidents/{}/retry-analysis", incidentId);
+        String clientIp = request.getRemoteAddr();
+        if (!rateLimiterService.isAllowed("retry-analysis", clientIp, 5, 60)) {
+            return ResponseEntity.status(HttpStatus.TOO_MANY_REQUESTS).body(Map.of(
+                    "status", "rate_limited",
+                    "message", "Too many retry attempts. Please wait 1 minute before retrying."
+            ));
+        }
         incidentService.retryAnalysis(incidentId);
         return ResponseEntity.ok(Map.of("status", "retry_requested", "message", "AI analysis retry has been queued"));
     }

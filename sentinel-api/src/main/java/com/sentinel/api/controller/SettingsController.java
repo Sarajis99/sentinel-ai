@@ -1,9 +1,12 @@
 package com.sentinel.api.controller;
 
+import com.sentinel.api.security.RateLimiterService;
 import com.sentinel.api.service.SettingsService;
+import jakarta.servlet.http.HttpServletRequest;
 import lombok.Data;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
@@ -16,6 +19,7 @@ import java.util.Map;
 public class SettingsController {
 
     private final SettingsService settingsService;
+    private final RateLimiterService rateLimiterService;
 
     @PutMapping("/settings/api-key")
     public ResponseEntity<Map<String, String>> updateApiKey(@RequestBody ApiKeyRequest request) {
@@ -34,7 +38,14 @@ public class SettingsController {
     }
 
     @GetMapping("/settings/test-llm")
-    public ResponseEntity<Map<String, Object>> testLlmConnection() {
+    public ResponseEntity<Map<String, Object>> testLlmConnection(HttpServletRequest request) {
+        String clientIp = request.getRemoteAddr();
+        if (!rateLimiterService.isAllowed("test-llm", clientIp, 5, 60)) {
+            return ResponseEntity.status(HttpStatus.TOO_MANY_REQUESTS).body(Map.of(
+                    "success", false,
+                    "message", "Rate limit exceeded. Please wait 1 minute before testing LLM connection again."
+            ));
+        }
         return ResponseEntity.ok(settingsService.testLLMConnection());
     }
 
