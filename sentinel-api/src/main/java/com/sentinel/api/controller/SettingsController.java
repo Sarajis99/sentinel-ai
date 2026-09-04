@@ -39,7 +39,7 @@ public class SettingsController {
 
     @GetMapping("/settings/test-llm")
     public ResponseEntity<Map<String, Object>> testLlmConnection(HttpServletRequest request) {
-        String clientIp = request.getRemoteAddr();
+        String clientIp = rateLimiterService.getClientIp(request);
         if (!rateLimiterService.isAllowed("test-llm", clientIp, 5, 60)) {
             return ResponseEntity.status(HttpStatus.TOO_MANY_REQUESTS).body(Map.of(
                     "success", false,

@@ -27,11 +27,11 @@ public class ChaosController {
     public ResponseEntity<?> injectChaos(@RequestBody ChaosInjectionRequest request, HttpServletRequest servletRequest) {
         log.info("🧪 POST /chaos/inject — Injecting {} on {}", request.getScenario(), request.getTargetService());
 
-        String clientIp = servletRequest.getRemoteAddr();
-        if (!rateLimiterService.isAllowed("chaos-inject", clientIp, 10, 60)) {
+        String clientIp = rateLimiterService.getClientIp(servletRequest);
+        if (!rateLimiterService.isAllowed("chaos-inject", clientIp, 20, 60)) {
             return ResponseEntity.status(HttpStatus.TOO_MANY_REQUESTS).body(Map.of(
                     "status", "error",
-                    "message", "Rate limit exceeded for chaos injection. Please wait 1 minute before injecting again."
+                    "message", "Rate limit exceeded for chaos injection. Maximum 20 requests per minute. Please wait before injecting again."
             ));
         }
 

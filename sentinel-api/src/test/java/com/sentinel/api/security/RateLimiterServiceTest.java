@@ -65,4 +65,41 @@ class RateLimiterServiceTest {
         // 4th request exceeds maxRequests=3, should be blocked
         assertFalse(rateLimiterService.isAllowed("fallback-action", "192.168.1.1", 3, 60));
     }
+
+    @Test
+    void whenXForwardedForPresent_extractsFirstIp() {
+        jakarta.servlet.http.HttpServletRequest request = mock(jakarta.servlet.http.HttpServletRequest.class);
+        when(request.getHeader("X-Forwarded-For")).thenReturn("203.0.113.195, 70.41.3.18");
+
+        String ip = rateLimiterService.getClientIp(request);
+        org.junit.jupiter.api.Assertions.assertEquals("203.0.113.195", ip);
+    }
+
+    @Test
+    void whenCfConnectingIpPresent_extractsIp() {
+        jakarta.servlet.http.HttpServletRequest request = mock(jakarta.servlet.http.HttpServletRequest.class);
+        when(request.getHeader("X-Forwarded-For")).thenReturn(null);
+        when(request.getHeader("CF-Connecting-IP")).thenReturn("198.51.100.1");
+
+        String ip = rateLimiterService.getClientIp(request);
+        org.junit.jupiter.api.Assertions.assertEquals("198.51.100.1", ip);
+    }
+
+    @Test
+    void whenNoProxyHeaders_fallsBackToRemoteAddr() {
+        jakarta.servlet.http.HttpServletRequest request = mock(jakarta.servlet.http.HttpServletRequest.class);
+        when(request.getHeader("X-Forwarded-For")).thenReturn(null);
+        when(request.getHeader("CF-Connecting-IP")).thenReturn(null);
+        when(request.getHeader("X-Real-IP")).thenReturn(null);
+        when(request.getRemoteAddr()).thenReturn("10.0.0.5");
+
+        String ip = rateLimiterService.getClientIp(request);
+        org.junit.jupiter.api.Assertions.assertEquals("10.0.0.5", ip);
+    }
+
+    @Test
+    void whenRequestNull_returnsUnknown() {
+        String ip = rateLimiterService.getClientIp(null);
+        org.junit.jupiter.api.Assertions.assertEquals("unknown", ip);
+    }
 }

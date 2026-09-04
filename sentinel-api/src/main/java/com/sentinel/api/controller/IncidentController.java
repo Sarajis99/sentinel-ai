@@ -135,7 +135,7 @@ public class IncidentController {
     @PostMapping("/{id}/retry-analysis")
     public ResponseEntity<Map<String, String>> retryAnalysis(@PathVariable("id") UUID incidentId, HttpServletRequest request) {
         log.info("POST /incidents/{}/retry-analysis", incidentId);
-        String clientIp = request.getRemoteAddr();
+        String clientIp = rateLimiterService.getClientIp(request);
         if (!rateLimiterService.isAllowed("retry-analysis", clientIp, 5, 60)) {
             return ResponseEntity.status(HttpStatus.TOO_MANY_REQUESTS).body(Map.of(
                     "status", "rate_limited",

@@ -1,5 +1,6 @@
 package com.sentinel.api.security;
 
+import jakarta.servlet.http.HttpServletRequest;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.redis.core.StringRedisTemplate;
@@ -23,6 +24,30 @@ public class RateLimiterService {
 
     // In-memory fallback if Redis is temporarily unavailable
     private final Map<String, WindowCounter> fallbackMap = new ConcurrentHashMap<>();
+
+    /**
+     * Resolves the real client IP, respecting reverse proxies / load balancers (Render, Cloudflare, etc.).
+     */
+    public String getClientIp(HttpServletRequest request) {
+        if (request == null) {
+            return "unknown";
+        }
+        String xForwardedFor = request.getHeader("X-Forwarded-For");
+        if (xForwardedFor != null && !xForwardedFor.trim().isEmpty()) {
+            // First IP in comma-separated proxy list is the original client
+            return xForwardedFor.split(",")[0].trim();
+        }
+        String cfConnectingIp = request.getHeader("CF-Connecting-IP");
+        if (cfConnectingIp != null && !cfConnectingIp.trim().isEmpty()) {
+            return cfConnectingIp.trim();
+        }
+        String xRealIp = request.getHeader("X-Real-IP");
+        if (xRealIp != null && !xRealIp.trim().isEmpty()) {
+            return xRealIp.trim();
+        }
+        String remoteAddr = request.getRemoteAddr();
+        return (remoteAddr != null && !remoteAddr.trim().isEmpty()) ? remoteAddr : "unknown";
+    }
 
     /**
      * Checks if a client request is within the allowed rate limit window.
