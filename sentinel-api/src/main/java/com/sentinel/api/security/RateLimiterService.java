@@ -66,13 +66,14 @@ public class RateLimiterService {
             if (count != null && count == 1) {
                 redisTemplate.expire(key, Duration.ofSeconds(windowSeconds));
             }
+            log.info("📊 Rate limit check [Redis]: key={} count={}/{} (window={}s)", key, count, maxRequests, windowSeconds);
             if (count != null && count > maxRequests) {
                 log.warn("⚠️ Rate limit exceeded for key={}: {}/{} in {}s", key, count, maxRequests, windowSeconds);
                 return false;
             }
             return true;
         } catch (Exception e) {
-            log.debug("Redis rate limiter unavailable ({}), using in-memory fallback", e.getMessage());
+            log.warn("⚠️ Redis rate limiter unavailable ({}), using in-memory fallback for key={}", e.getMessage(), key);
             return isAllowedFallback(key, maxRequests, windowSeconds);
         }
     }
@@ -92,7 +93,9 @@ public class RateLimiterService {
             return existing;
         });
 
-        return counter != null && counter.counter.get() <= maxRequests;
+        boolean allowed = counter != null && counter.counter.get() <= maxRequests;
+        log.info("📊 Rate limit check [In-Memory Fallback]: key={} count={}/{} allowed={}", key, counter != null ? counter.counter.get() : 0, maxRequests, allowed);
+        return allowed;
     }
 
     private static class WindowCounter {
