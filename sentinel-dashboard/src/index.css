@@ -247,10 +247,27 @@ body { font-family: var(--font-sans); background: var(--bg-primary); color: var(
   flex-shrink: 0;
 }
 
+.top-header__left {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
 .top-header__title {
   font-size: 1.15rem;
   font-weight: 600;
   color: var(--text-primary);
+}
+
+.top-header__actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.mobile-sim-btn {
+  display: none;
 }
 
 /* ─── Content Scroll Area ──────────────────────────────────────────────────── */
@@ -1908,8 +1925,12 @@ body { font-family: var(--font-sans); background: var(--bg-primary); color: var(
 }
 
 .chaos-panel__disabled-msg {
-  text-align: center;
-  padding: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 12px;
+  padding: 12px 16px;
   font-size: 0.8rem;
   color: var(--text-muted);
   background: var(--bg-primary);
@@ -2448,7 +2469,43 @@ body { font-family: var(--font-sans); background: var(--bg-primary); color: var(
   }
 
   .top-header__title {
-    font-size: 1.05rem;
+    font-size: 1rem;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .top-header__actions {
+    gap: 8px;
+    flex-shrink: 0;
+  }
+
+  /* Mobile Top Header Quick Sim Button */
+  .mobile-sim-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 5px 10px;
+    font-size: 0.74rem;
+    font-weight: 600;
+    color: #ffffff;
+    background: var(--accent-primary);
+    border: 1px solid var(--accent-primary);
+    border-radius: var(--radius-full);
+    cursor: pointer;
+    transition: all var(--transition-fast);
+    white-space: nowrap;
+  }
+
+  .mobile-sim-btn.running {
+    background: var(--severity-p1);
+    border-color: var(--severity-p1);
+    animation: pulseSim 1.8s infinite;
+  }
+
+  @keyframes pulseSim {
+    0%, 100% { opacity: 1; transform: scale(1); }
+    50% { opacity: 0.85; transform: scale(0.97); }
   }
 
   /* Sidebar drawer mode */
@@ -2457,14 +2514,30 @@ body { font-family: var(--font-sans); background: var(--bg-primary); color: var(
     top: 0;
     left: 0;
     height: 100vh;
+    height: 100dvh;
+    max-height: 100dvh;
     width: min(280px, 80vw);
     transform: translateX(-100%);
     transition: transform var(--transition-normal);
     z-index: 1000;
+    display: flex;
+    flex-direction: column;
+    overflow-y: auto;
   }
 
   .sidebar.open {
     transform: translateX(0);
+  }
+
+  .sidebar__footer {
+    padding: 14px 16px;
+    padding-bottom: max(16px, env(safe-area-inset-bottom, 16px));
+    position: sticky;
+    bottom: 0;
+    background: var(--bg-card);
+    border-top: 1px solid var(--border-subtle);
+    z-index: 2;
+    margin-top: auto;
   }
 
   /* Dark overlay when sidebar is open */

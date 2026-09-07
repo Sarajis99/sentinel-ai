@@ -584,7 +584,14 @@ export default function App() {
           </div>
         ) : (
           <div className="chaos-panel__disabled-msg">
-            ⚠️ Start the simulation engine to unlock anomaly injection
+            <span>⚠️ Start the simulation engine to unlock anomaly injection</span>
+            <button 
+              className="btn btn-primary" 
+              onClick={handleSimulate}
+              style={{padding: '6px 14px', fontSize: '0.78rem', display: 'inline-flex', alignItems: 'center', gap: '6px'}}
+            >
+              <Play size={13} fill="currentColor" /> Start Simulation
+            </button>
           </div>
         )}
       </div>
@@ -1336,20 +1343,35 @@ export default function App() {
         
         {/* Top Header */}
         <header className="top-header">
-          <button 
-            className="mobile-menu-btn" 
-            onClick={() => setIsSidebarOpen(true)}
-            aria-label="Open Menu"
-          >
-            <Menu size={24} />
-          </button>
-          <h1 className="top-header__title">
-            {currentView === 'dashboard' ? 'Global Overview' : currentView === 'settings' ? 'Settings' : 'Incident Management'}
-          </h1>
+          <div className="top-header__left">
+            <button 
+              className="mobile-menu-btn" 
+              onClick={() => setIsSidebarOpen(true)}
+              aria-label="Open Menu"
+            >
+              <Menu size={24} />
+            </button>
+            <h1 className="top-header__title">
+              {currentView === 'dashboard' ? 'Global Overview' : currentView === 'settings' ? 'Settings' : 'Incident Management'}
+            </h1>
+          </div>
           
-          <button className="theme-toggle" onClick={toggleTheme} title={theme === 'light' ? 'Switch to Dark Mode' : 'Switch to Light Mode'}>
-            {theme === 'light' ? <Moon size={18} /> : <Sun size={18} />}
-          </button>
+          <div className="top-header__actions">
+            <button
+              className={`mobile-sim-btn ${simRunning ? 'running' : ''}`}
+              onClick={simRunning ? handleStopSimulation : handleSimulate}
+              title={simRunning ? 'Stop Simulation' : 'Start Simulation'}
+            >
+              {simRunning ? (
+                <><Square size={12} fill="currentColor" /> Stop</>
+              ) : (
+                <><Play size={12} fill="currentColor" /> Sim</>
+              )}
+            </button>
+            <button className="theme-toggle" onClick={toggleTheme} title={theme === 'light' ? 'Switch to Dark Mode' : 'Switch to Light Mode'}>
+              {theme === 'light' ? <Moon size={18} /> : <Sun size={18} />}
+            </button>
+          </div>
         </header>
 
         {/* Scrollable Content Area */}
