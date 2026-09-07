@@ -719,18 +719,18 @@ export default function App() {
           </div>
         ) : (
           <div className="detail-panel" style={{padding: 0}}>
-            <div className="detail-header" style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px', padding: '16px 24px', borderBottom: '1px solid var(--border-subtle)'}}>
-              <div style={{display: 'flex', alignItems: 'center', gap: '8px'}}>
+            <div className="detail-header">
+              <div className="detail-header-left">
                 <button className="mobile-back-btn" onClick={() => setSelected(null)}>
                   <ChevronLeft size={16} /> Back
                 </button>
-                <div className="detail-header__top" style={{marginBottom: 0}}>
+                <div className="detail-header__top">
                   <span className="incident-number-badge">{selected.incidentNumber || 'INC-NEW'}</span>
-                  <h2 className="detail-header__title" style={{marginBottom: 0, display: 'inline-block'}}>{selected.title}</h2>
+                  <h2 className="detail-header__title">{selected.title}</h2>
                 </div>
               </div>
               
-              <div className="action-bar" style={{borderTop: 'none', padding: 0, background: 'transparent'}}>
+              <div className="action-bar">
                 {(selected.status === 'NEW' || selected.status === 'ASSESSING') && (
                   <span className="ai-processing-indicator">
                     <span className="spinner" style={{width: '14px', height: '14px'}} /> AI is analyzing this incident...
