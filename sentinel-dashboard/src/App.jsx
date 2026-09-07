@@ -711,14 +711,14 @@ export default function App() {
       </div>
 
       {/* Right: Detail Panel */}
-      <div className={`incident-detail-panel ${!selected ? 'mobile-hide' : ''}`} style={{display: 'flex', flexDirection: 'column', overflow: 'hidden'}}>
+      <div className={`incident-detail-panel ${!selected ? 'mobile-hide' : ''}`}>
         {!selected ? (
           <div className="empty-state">
             <div className="empty-state__icon">📋</div>
             <div>{incidents.length === 0 ? 'No incidents active. System is running healthy.' : 'Select an incident from the queue to view RCA details.'}</div>
           </div>
         ) : (
-          <div className="detail-panel" style={{flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', padding: 0}}>
+          <div className="detail-panel" style={{padding: 0}}>
             <div className="detail-header" style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px', padding: '16px 24px', borderBottom: '1px solid var(--border-subtle)'}}>
               <div style={{display: 'flex', alignItems: 'center', gap: '8px'}}>
                 <button className="mobile-back-btn" onClick={() => setSelected(null)}>

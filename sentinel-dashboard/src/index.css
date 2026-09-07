@@ -400,9 +400,10 @@ body { font-family: var(--font-sans); background: var(--bg-primary); color: var(
 /* ─── Incident Split View (Incidents Tab) ──────────────────────────────────── */
 .incident-view {
   display: grid;
-  grid-template-columns: minmax(260px, 30%) 1fr;
+  grid-template-columns: minmax(280px, 320px) 1fr;
   gap: var(--space-md);
-  height: calc(100vh - 120px);
+  min-height: calc(100vh - 115px);
+  align-items: start;
 }
 
 .incident-list-panel {
@@ -413,11 +414,21 @@ body { font-family: var(--font-sans); background: var(--bg-primary); color: var(
   flex-direction: column;
   box-shadow: var(--shadow-sm);
   overflow: hidden;
+  position: sticky;
+  top: 0;
+  height: calc(100vh - 115px);
 }
 
 .feed-list {
   flex: 1;
   overflow-y: auto;
+}
+
+.incident-detail-panel {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: calc(100vh - 115px);
 }
 
 .feed-item {
@@ -521,11 +532,10 @@ body { font-family: var(--font-sans); background: var(--bg-primary); color: var(
 .tab.active { color: var(--accent-primary); border-bottom-color: var(--accent-primary); }
 
 .detail-content {
-  flex: 1;
-  overflow-y: auto;
   padding: var(--space-lg);
   display: flex;
   flex-direction: column;
+  gap: var(--space-md);
 }
 
 .rca-grid {
@@ -668,7 +678,6 @@ body { font-family: var(--font-sans); background: var(--bg-primary); color: var(
   overflow: hidden;
   display: flex;
   flex-direction: column;
-  flex: 1;
 }
 
 .sn-header-bar {
@@ -752,8 +761,6 @@ body { font-family: var(--font-sans); background: var(--bg-primary); color: var(
   background: #ffffff;
   display: flex;
   flex-direction: column;
-  flex: 1;
-  overflow-y: auto;
 }
 
 .sn-form-grid {
@@ -848,7 +855,6 @@ body { font-family: var(--font-sans); background: var(--bg-primary); color: var(
   flex-direction: column;
   gap: 12px;
   max-width: 900px;
-  flex: 1;
 }
 
 .sn-form-full .sn-form-group:last-child {
@@ -2381,16 +2387,18 @@ body { font-family: var(--font-sans); background: var(--bg-primary); color: var(
   .incident-view {
     display: flex;
     flex-direction: column;
-    height: calc(100vh - 80px);
+    height: auto;
+    min-height: calc(100vh - 80px);
   }
 
   .incident-list-panel {
-    flex: 1;
+    position: static;
+    height: calc(100vh - 80px);
     display: flex;
   }
   
   .incident-detail-panel {
-    flex: 1;
+    min-height: auto;
     display: flex;
     flex-direction: column;
   }
