@@ -584,14 +584,7 @@ export default function App() {
           </div>
         ) : (
           <div className="chaos-panel__disabled-msg">
-            <span>⚠️ Start the simulation engine to unlock anomaly injection</span>
-            <button 
-              className="btn btn-primary" 
-              onClick={handleSimulate}
-              style={{padding: '6px 14px', fontSize: '0.78rem', display: 'inline-flex', alignItems: 'center', gap: '6px'}}
-            >
-              <Play size={13} fill="currentColor" /> Start Simulation
-            </button>
+            ⚠️ Start the simulation engine to unlock anomaly injection
           </div>
         )}
       </div>
